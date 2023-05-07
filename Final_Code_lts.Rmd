@@ -223,7 +223,7 @@ if (!file.exists(folder_path)) {
 # labels = c("Predictors", "Recovery Time"), type = c("p", "smooth"))
 
 # scatter plot of continuous predictors
-jpeg("./figure/eda_sactter_hist.jpeg", width=8, height=12, units="in", res=500)
+jpeg("./figure/eda1_sactter_hist.jpeg", width=8, height=12, units="in", res=500)
 par(mfrow=c(2, 3))
 for (i in 1:length(cts_var)){
   var = cts_var[i]
@@ -245,7 +245,7 @@ dev.off()
 
 
 # boxplot of categorical predictors
-jpeg("./figure/eda_boxplot.jpeg", width = 10, height=6, units="in", res=500)
+jpeg("./figure/eda1_boxplot.jpeg", width = 10, height=6, units="in", res=500)
 par(mfrow=c(2, 4))
 for (i in 1:length(fct_var)){
   var = fct_var[i]
@@ -258,7 +258,7 @@ for (i in 1:length(fct_var)){
 dev.off()
 
 # histogram of response
-jpeg("./figure/eda_res_hist.jpeg", width = 8, height=6, units="in", res=500)
+jpeg("./figure/eda1_res_hist.jpeg", width = 8, height=6, units="in", res=500)
 par(mfrow=c(1, 1))
 hist(train.dat$recovery_time, 
      breaks = 50, 
@@ -267,7 +267,7 @@ hist(train.dat$recovery_time,
 dev.off()
 
 # correlation
-jpeg("./figure/eda_corr.jpeg", width = 5, height=5, units="in", res=500)
+jpeg("./figure/eda1_corr.jpeg", width = 5, height=5, units="in", res=500)
 par(mfrow=c(1, 1))
 corrplot(cor(train.dat[,cts_var]), method = "circle", type = "full", 
          title = "Correlation plot of continuous variables", 
