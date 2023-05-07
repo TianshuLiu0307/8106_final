@@ -1,15 +1,15 @@
 ---
-title: "Midterm Project Code"
-author: "Tianshu Liu"
+title: "Final Project Code"
+author: "Tianshu Liu, Lincole Jiang, Jiong Ma"
 output:
   pdf_document:
     toc: yes
-    toc_depth: 2
+    toc_depth: 3
     number_sections: true
   html_document:
     df_print: paged
     toc: yes
-    toc_depth: '2'
+    toc_depth: '3'
 header-includes:
 - \usepackage{fancyhdr}
 - \usepackage{lipsum}
@@ -20,6 +20,8 @@ editor_options:
   chunk_output_type: console
 ---
 \newpage
+
+
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE, 
@@ -35,6 +37,7 @@ library(caret)
 library(vip)
 ```
 
+# Data Import
 ```{r import_data}
 # import data
 load("./recovery.RData")
@@ -88,11 +91,20 @@ dat3 <- lincole.dat %>%
     severity = as.factor(severity),
     study = as.factor(study))
 
-summary(dat1)
-summary(dat2)
-summary(dat3)
-
 dat <- dat1
+summary(dat)
+
+bin.dat1 <- dat1 %>% 
+  mutate(recovery_time = ifelse(recovery_time > 30, 1, 0))
+  
+bin.dat2 <- dat2 %>% 
+  mutate(recovery_time = ifelse(recovery_time > 30, 1, 0))
+
+bin.dat3 <- dat3 %>% 
+  mutate(recovery_time = ifelse(recovery_time > 30, 1, 0))
+
+bin.dat <- bin.dat1
+summary(bin.dat)
 ```
 
 # Data partition
@@ -104,31 +116,35 @@ dat.matrix <- model.matrix(recovery_time ~ ., dat)[ ,-1]
 set.seed(2023)
 trainRows <- createDataPartition(y = dat$recovery_time, p = 0.8, list = FALSE)
 
-train_dat <- dat[trainRows,]
+train.dat <- dat[trainRows,]
+train.bin.dat <- bin.dat[trainRows,]
 
-train_x <- dat.matrix[trainRows,]
-train_y <- dat$recovery_time[trainRows]
+train.x <- dat.matrix[trainRows,]
+train.y <- dat$recovery_time[trainRows]
+train.bin.y <- bin.dat$recovery_time[trainRows]
 
-test_x <- dat.matrix[-trainRows,]
-test_y <- dat$recovery_time[-trainRows]
+test.x <- dat.matrix[-trainRows,]
+test.y <- dat$recovery_time[-trainRows]
+test.bin.y <- bin.dat$recovery_time[-trainRows]
 ```
 
-# Exploratory analysis and data visualization
+# Primary Analysis
+## Exploratory analysis and data visualization
 
-```{r data_summary, results = 'asis'}
+```{r primary_summary, results = 'asis'}
 # data summary
 st_options(plain.ascii = FALSE,
            style = "rmarkdown",
            dfSummary.silent = TRUE,
            footnote = NA,
            subtitle.emphasis = FALSE)
-dfSummary(train_dat)
+dfSummary(train.dat)
 
-skimr::skim_without_charts(train_dat)
+skimr::skim_without_charts(train.dat)
 ```
 
 
-```{r eda, fig.show='true'}
+```{r pri_eda, fig.show='true'}
 ####################################################################
 ## Remember to edit the next chunk if you do any modification here:)
 ####################################################################
@@ -149,16 +165,16 @@ fct_var = c("gender", "race", "smoking", "hypertension", "diabetes", "vaccine", 
 par(mfrow=c(2, 3))
 for (i in 1:length(cts_var)){
   var = cts_var[i]
-  plot(recovery_time~train_dat[,var],
-       data = train_dat,
+  plot(recovery_time~train.dat[,var],
+       data = train.dat,
        ylab = "recovery_time",
        xlab = var,
        main = str_c("Scatter Plot of ", var))
-  lines(stats::lowess(train_dat[,var], train_dat$recovery_time), col = "red", type = "l")
+  lines(stats::lowess(train.dat[,var], train.dat$recovery_time), col = "red", type = "l")
 }
 for (i in 1:length(cts_var)){
   var = cts_var[i]
-  hist(train_dat[,var], 
+  hist(train.dat[,var], 
        ylab = "recovery_time", 
        xlab = var, 
        main = str_c("Histogram of ", var)) 
@@ -168,8 +184,8 @@ for (i in 1:length(cts_var)){
 par(mfrow=c(2, 4))
 for (i in 1:length(fct_var)){
   var = fct_var[i]
-  plot(recovery_time~train_dat[,var],
-       data = train_dat,
+  plot(recovery_time~train.dat[,var],
+       data = train.dat,
        ylab = "recovery_time", 
        xlab = var, 
        main = str_c("Boxplot of ", var))
@@ -177,19 +193,19 @@ for (i in 1:length(fct_var)){
 
 # histogram of response
 par(mfrow=c(1, 1))
-hist(train_dat$recovery_time, 
+hist(train.dat$recovery_time, 
      breaks = 50, 
      main = "Histogram of recovery_time", 
      xlab = "recovery_time")
 
 # correlation
 par(mfrow=c(1, 1))
-corrplot(cor(train_dat[,cts_var]), method = "circle", type = "full", 
+corrplot(cor(train.dat[,cts_var]), method = "circle", type = "full", 
          title = "Correlation plot of continuous variables", 
          mar = c(2, 2, 4, 2))
 ```
 
-```{r eda_save_plot, include=FALSE}
+```{r pri_eda_save_plot, include=FALSE}
 # this chunk is used just for saving codes
 # create folder for figures
 folder_path <- "./figure/"
@@ -211,16 +227,16 @@ jpeg("./figure/eda_sactter_hist.jpeg", width=8, height=12, units="in", res=500)
 par(mfrow=c(2, 3))
 for (i in 1:length(cts_var)){
   var = cts_var[i]
-  plot(recovery_time~train_dat[,var],
-       data = train_dat,
+  plot(recovery_time~train.dat[,var],
+       data = train.dat,
        ylab = "recovery_time",
        xlab = var,
        main = str_c("Scatter Plot of ", var))
-  lines(stats::lowess(train_dat[,var], train_dat$recovery_time), col = "red", type = "l")
+  lines(stats::lowess(train.dat[,var], train.dat$recovery_time), col = "red", type = "l")
 }
 for (i in 1:length(cts_var)){
   var = cts_var[i]
-  hist(train_dat[,var], 
+  hist(train.dat[,var], 
        ylab = "recovery_time", 
        xlab = var, 
        main = str_c("Histogram of ", var)) 
@@ -233,8 +249,8 @@ jpeg("./figure/eda_boxplot.jpeg", width = 10, height=6, units="in", res=500)
 par(mfrow=c(2, 4))
 for (i in 1:length(fct_var)){
   var = fct_var[i]
-  plot(recovery_time~train_dat[,var],
-       data = train_dat,
+  plot(recovery_time~train.dat[,var],
+       data = train.dat,
        ylab = "recovery_time", 
        xlab = var, 
        main = str_c("Boxplot of ", var))
@@ -244,7 +260,7 @@ dev.off()
 # histogram of response
 jpeg("./figure/eda_res_hist.jpeg", width = 8, height=6, units="in", res=500)
 par(mfrow=c(1, 1))
-hist(train_dat$recovery_time, 
+hist(train.dat$recovery_time, 
      breaks = 50, 
      main = "Histogram of recovery_time", 
      xlab = "recovery_time")
@@ -253,20 +269,20 @@ dev.off()
 # correlation
 jpeg("./figure/eda_corr.jpeg", width = 5, height=5, units="in", res=500)
 par(mfrow=c(1, 1))
-corrplot(cor(train_dat[,cts_var]), method = "circle", type = "full", 
+corrplot(cor(train.dat[,cts_var]), method = "circle", type = "full", 
          title = "Correlation plot of continuous variables", 
          mar = c(2, 2, 4, 2))
 dev.off()
 ```
 
-# Model Training
-## Linear Model
+## Model Training
+### Linear Model
 
 ```{r linear}
 ctrl1 <- trainControl(method = "cv", number = 10)
-set.seed(3196)
+set.seed(2023)
 
-lm.fit <- train(train_x, train_y,
+lm.fit <- train(train.x, train.y,
                method = "lm",
                trControl = ctrl1)
 
@@ -275,11 +291,11 @@ coef(lm.fit$finalModel)
 vip(lm.fit$finalModel)
 ```
 
-## LASSO
+### LASSO
 
 ```{r lasso}
-set.seed(3196)
-lasso.fit <- train(train_x, train_y,
+set.seed(2023)
+lasso.fit <- train(train.x, train.y,
                    method = "glmnet",
                    tuneGrid = expand.grid(
                      alpha = 1,
@@ -300,11 +316,11 @@ vip(lasso.fit$finalModel)
 ```
 
 
-## Ridge
+### Ridge
 
 ```{r ridge}
-set.seed(3196)
-ridge.fit <- train(train_x, train_y,
+set.seed(2023)
+ridge.fit <- train(train.x, train.y,
                    method = "glmnet",
                    tuneGrid = expand.grid(alpha = 0,
                                           lambda = exp(seq(1, -5, length=100))), 
@@ -324,11 +340,11 @@ vip(ridge.fit$finalModel)
 ```
 
 
-## Elastic Net
+### Elastic Net
 
 ```{r enet}
-set.seed(3196)
-enet.fit <- train(train_x, train_y,
+set.seed(2023)
+enet.fit <- train(train.x, train.y,
                   method = "glmnet",
                   tuneGrid = expand.grid(
                     alpha = seq(0, 1, length = 21),
@@ -350,14 +366,14 @@ ggsave("./figure/enet_cv.jpeg", dpi = 500)
 vip(enet.fit$finalModel)
 ```
 
-## Principal components regression (PCR)
+### Principal components regression (PCR)
 
 ```{r pcr}
-set.seed(3196)
-pcr.fit <- train(train_x, 
-                 train_y,
+set.seed(2023)
+pcr.fit <- train(train.x, 
+                 train.y,
                  method = "pcr",
-                 tuneGrid  = data.frame(ncomp = 1:ncol(train_x)),
+                 tuneGrid  = data.frame(ncomp = 1:ncol(train.x)),
                  trControl = ctrl1,
                  preProcess = c("center", "scale"))
 ggplot(pcr.fit, highlight = TRUE) + 
@@ -372,14 +388,14 @@ coef(pcr.fit$finalModel)
 vip(pcr.fit$finalModel)
 ```
 
-## Partial Least Squares (PLS)
+### Partial Least Squares (PLS)
 
 ```{r pls}
-set.seed(3196)
-pls.fit <- train(train_x, 
-                 train_y,
+set.seed(2023)
+pls.fit <- train(train.x, 
+                 train.y,
                  method = "pls",
-                 tuneGrid = data.frame(ncomp = 1:ncol(train_x)),
+                 tuneGrid = data.frame(ncomp = 1:ncol(train.x)),
                  trControl = ctrl1,
                  preProcess = c("center", "scale"))
 ggplot(pls.fit, highlight = TRUE) + 
@@ -394,12 +410,12 @@ coef(pls.fit$finalModel)
 vip(pls.fit$finalModel)
 ```
 
-## Generalized additive model (GAM)
+### Generalized Additive Model (GAM)
 
 ```{r gam}
-set.seed(3196)
-gam.fit <- train(train_x, 
-                 train_y,
+set.seed(2023)
+gam.fit <- train(train.x, 
+                 train.y,
                  method = "gam",
                  tuneGrid = data.frame(select = c(TRUE, FALSE), 
                                        method = "GCV.Cp"),
@@ -421,14 +437,14 @@ plot(gam.fit$finalModel)
 par(mfrow=c(1, 1))
 ```
 
-## Multivariate Adaptive Regression Splines (MARS)
+### Multivariate Adaptive Regression Splines (MARS)
 
 ```{r mars}
 mars_grid <- expand.grid(degree = 1:3,
                          nprune = 2:15)
-set.seed(3196)
-mars.fit <- train(train_x, 
-                  train_y,
+set.seed(2023)
+mars.fit <- train(train.x, 
+                  train.y,
                   method = "earth",
                   tuneGrid = mars_grid,
                   trControl = ctrl1)
@@ -448,12 +464,12 @@ summary(mars.fit$finalModel)
 vip(mars.fit$finalModel)
 ```
 
-## K-Nearest Neighbour (KNN)
+### K-Nearest Neighbour (KNN)
 
 ```{r knn}
-set.seed(3196)
-knn.fit <- train(train_x, 
-                train_y,
+set.seed(2023)
+knn.fit <- train(train.x, 
+                train.y,
                 tuneGrid  = data.frame(k = 1:20),
                 method = "knn",
                 trControl = ctrl1)
@@ -467,10 +483,18 @@ ggsave("./figure/knn_cv.jpeg", dpi = 500)
 knn.fit$bestTune
 ```
 
+### Bagging
 
-# Model Selection
+### Random Forest
+
+### Boosting
+
+### Regression Trees
+
+## Model Selection
 
 ```{r resample}
+set.seed(2023)
 resamp <- resamples(list(lm = lm.fit,
                          lasso = lasso.fit,
                          ridge = ridge.fit,
@@ -508,14 +532,144 @@ gridExtra::grid.arrange(p1, p2, ncol = 2)
 varImp(mars.fit$finalModel)
 ```
 
-# Training / Testing Error
+## Training / Testing Error
 
 ```{r err}
 # training error
-mars.train.pred = predict(mars.fit, newdata = train_x)
-RMSE(train_y, mars.train.pred)
+mars.train.pred = predict(mars.fit, newdata = train.x)
+RMSE(train.y, mars.train.pred)
 
 # testing error
-mars.pred = predict(mars.fit, newdata = test_x)
-RMSE(test_y, mars.pred)
+mars.pred = predict(mars.fit, newdata = test.x)
+RMSE(test.y, mars.pred)
 ```
+
+# Secondary Analysis
+
+## Exploratory analysis and data visualization
+
+```{r sec_summary, results = 'asis'}
+# data summary
+st_options(plain.ascii = FALSE,
+           style = "rmarkdown",
+           dfSummary.silent = TRUE,
+           footnote = NA,
+           subtitle.emphasis = FALSE)
+dfSummary(train.bin.dat)
+
+skimr::skim_without_charts(train.bin.dat)
+```
+
+
+```{r sec_eda, fig.show='true'}
+####################################################################
+## Remember to edit the next chunk if you do any modification here:)
+####################################################################
+
+```
+
+```{r sec_eda_save_plot, include=FALSE}
+# this chunk is used just for saving codes
+# EDA
+# library(GGally)
+# ggpairs(dat)
+# featurePlot(x = traindataset1[ ,1:14],
+#             y = traindataset1[ ,15],
+# plot = "scatter",
+# span = .5,
+# labels = c("Predictors", "Recovery Time"), type = c("p", "smooth"))
+
+# scatter plot of continuous predictors
+# jpeg("./figure/eda_sactter_hist.jpeg", width=8, height=12, units="in", res=500)
+# par(mfrow=c(2, 3))
+# for (i in 1:length(cts_var)){
+#   var = cts_var[i]
+#   plot(recovery_time~train.dat[,var],
+#        data = train.dat,
+#        ylab = "recovery_time",
+#        xlab = var,
+#        main = str_c("Scatter Plot of ", var))
+#   lines(stats::lowess(train.dat[,var], train.dat$recovery_time), col = "red", type = "l")
+# }
+# for (i in 1:length(cts_var)){
+#   var = cts_var[i]
+#   hist(train.dat[,var], 
+#        ylab = "recovery_time", 
+#        xlab = var, 
+#        main = str_c("Histogram of ", var)) 
+# }
+# dev.off()
+# 
+# 
+# # boxplot of categorical predictors
+# jpeg("./figure/eda_boxplot.jpeg", width = 10, height=6, units="in", res=500)
+# par(mfrow=c(2, 4))
+# for (i in 1:length(fct_var)){
+#   var = fct_var[i]
+#   plot(recovery_time~train.dat[,var],
+#        data = train.dat,
+#        ylab = "recovery_time", 
+#        xlab = var, 
+#        main = str_c("Boxplot of ", var))
+# }
+# dev.off()
+# 
+# # histogram of response
+# jpeg("./figure/eda_res_hist.jpeg", width = 8, height=6, units="in", res=500)
+# par(mfrow=c(1, 1))
+# hist(train.dat$recovery_time, 
+#      breaks = 50, 
+#      main = "Histogram of recovery_time", 
+#      xlab = "recovery_time")
+# dev.off()
+# 
+# # correlation
+# jpeg("./figure/eda_corr.jpeg", width = 5, height=5, units="in", res=500)
+# par(mfrow=c(1, 1))
+# corrplot(cor(train.dat[,cts_var]), method = "circle", type = "full", 
+#          title = "Correlation plot of continuous variables", 
+#          mar = c(2, 2, 4, 2))
+# dev.off()
+```
+
+
+## Model Training
+
+### Logistic Regression
+
+
+### Penalized Logistic Regression
+
+
+### Generalized Additive Model (GAM) for classification
+
+### Multivariate Adaptive Regression Splines (MARS) for classification
+
+### Linear Discriminant Analysis (LDA)
+
+
+### Quadratic Discriminant Analysis (QDA)
+
+
+### Naive Bayes (NB)
+
+### Bagging
+
+### Random Forest
+
+### Boosting
+
+
+### Classification Trees
+
+
+
+### Support Vector Machine (SVM)
+
+### Hierarchical Clustering
+
+### Principal Component Analysis (PCA)
+
+## Model Selection
+
+## Training  / Testing Error
