@@ -35,6 +35,7 @@ library(summarytools)
 library(corrplot)
 library(caret)
 library(vip)
+library(rpart.plot)
 ```
 
 # Data Import
@@ -95,16 +96,16 @@ dat <- dat1
 summary(dat)
 
 bin.dat1 <- dat1 %>% 
-  mutate(recovery_time = ifelse(recovery_time > 30, ">30", "<=30")) %>% 
-  mutate(recovery_time = factor(recovery_time, levels = c("<=30", ">30")))
+  mutate(recovery_time = ifelse(recovery_time > 30, "gt30", "lt30")) %>% 
+  mutate(recovery_time = factor(recovery_time, levels = c("lt30", "gt30")))
   
 bin.dat2 <- dat2 %>% 
-  mutate(recovery_time = ifelse(recovery_time > 30, ">30", "<=30")) %>% 
-  mutate(recovery_time = factor(recovery_time, levels = c("<=30", ">30")))
+  mutate(recovery_time = ifelse(recovery_time > 30, "gt30", "lt30")) %>% 
+  mutate(recovery_time = factor(recovery_time, levels = c("lt30", "gt30")))
 
 bin.dat3 <- dat3 %>% 
-  mutate(recovery_time = ifelse(recovery_time > 30, ">30", "<=30")) %>% 
-  mutate(recovery_time = factor(recovery_time, levels = c("<=30", ">30")))
+ mutate(recovery_time = ifelse(recovery_time > 30, "gt30", "lt30")) %>% 
+  mutate(recovery_time = factor(recovery_time, levels = c("lt30", "gt30")))
 
 bin.dat <- bin.dat1
 summary(bin.dat)
@@ -153,9 +154,6 @@ skimr::skim_without_charts(train.dat)
 ####################################################################
 
 # EDA
-# library(GGally)
-# ggpairs(dat)
-
 cts_var = c("age", "height", "weight", "bmi", "SBP", "LDL")
 fct_var = c("gender", "race", "smoking", "hypertension", "diabetes", "vaccine", "severity", "study")
 
@@ -480,11 +478,49 @@ knn.fit$bestTune
 
 ### Bagging
 
+```{r bagging}
+
+```
+
+
 ### Random Forest
+
+```{r rf}
+
+```
+
 
 ### Boosting
 
+```{r boosting}
+
+```
+
 ### Regression Trees
+
+```{r rpart}
+rpart_grid <- expand.grid(cp = exp(seq(-5,-2, length = 50)))
+set.seed(2023)
+rpart.fit1 <- train(train.x, 
+                   train.y,
+                   method = "rpart",
+                   tuneGrid = rpart_grid,
+                   trControl = ctrl1)
+ggplot(rpart.fit1, highlight = TRUE) +
+  labs(titlem = "Regression Tree CV Result") +
+  theme_bw()
+
+ggsave("./figure/rpart1_cv.jpeg", dpi = 500)
+
+rpart.fit1$bestTune
+
+rpart.plot(rpart.fit1$finalModel)
+
+jpeg("./figure/rpart1.jpeg", width = 8, height = 6, units="in", res=500)
+rpart.plot(rpart.fit1$finalModel)
+dev.off()
+```
+
 
 ## Model Selection
 
@@ -561,7 +597,6 @@ skimr::skim_without_charts(train.bin.dat)
 ## Remember to edit the next chunk if you do any modification here:)
 ####################################################################
 # EDA
-
 
 # boxplot of continuous predictors
 par(mfrow=c(2, 3))
@@ -642,8 +677,18 @@ dev.off()
 
 ### Logistic Regression
 
+```{r logistic}
+ctrl2 <- trainControl(method = "cv",
+                     summaryFunction = twoClassSummary,
+                     classProbs = TRUE)
+
+
+
+```
+
 
 ### Penalized Logistic Regression
+
 
 
 ### Generalized Additive Model (GAM) for classification
@@ -667,13 +712,71 @@ dev.off()
 
 ### Classification Trees
 
+```{r rpart}
+rpart_grid = expand.grid(cp = exp(seq(-6,-4, len = 50)))
+set.seed(2023)
+rpart.fit2 <- train(train.x, 
+                   train.bin.y, 
+                   method = "rpart",
+                   tuneGrid = rpart_grid,
+                   trControl = ctrl2,
+                   metric = "ROC")
+rpart.fit2$bestTune
+ggplot(rpart.fit2, highlight = TRUE) +
+  labs(title = "Classification Tree CV Result") + 
+  theme_bw()
+ggsave("./figure/rpart2_cv.jpeg", dpi = 500)
+
+rpart.plot(rpart.fit2$finalModel)
+
+jpeg("./figure/rpart2.jpeg", width = 8, height = 6, units="in", res=500)
+rpart.plot(rpart.fit2$finalModel)
+dev.off()
+```
 
 
 ### Support Vector Machine (SVM)
 
-### Hierarchical Clustering
+```{r svml}
+svml.gird <- expand.grid(C = exp(seq(-5,2,len=50)))
+set.seed(2023)
+svml.fit <- train(train.x, 
+                  train.bin.y,
+                  method = "svmLinear",
+                  tuneGrid = svml.gird, 
+                  trControl = ctrl1)
+ggplot(svml.fit, highlight = TRUE, xTrans = log) + 
+  labs(title = "SVM Linear CV result") + 
+  theme_bw()
 
-### Principal Component Analysis (PCA)
+ggsave("./figure/svml_cv.jpeg", dpi = 500)
+
+
+```
+
+
+```{r svmr}
+svmr.grid <- expand.grid(C = exp(seq(1,7,len=50)),
+                         sigma = exp(seq(-10,-2,len=20)))
+
+set.seed(2023)
+svmr.fit <- train(train.x, 
+                  train.bin.y,
+                  method = "svmRadialSigma",
+                  tuneGrid = svmr.grid,
+                  trControl = ctrl1)
+myCol<- rainbow(25)
+myPar <- list(superpose.symbol = list(col = myCol),
+              superpose.line = list(col = myCol))
+ggplot(svmr.fit, highlight = TRUE, par.settings = myPar) + 
+  labs(title = "SVM Radial CV result") + 
+  theme_bw()
+
+ggsave("./figure/svmr_cv.jpeg", dpi = 500)
+
+
+```
+
 
 ## Model Selection
 
