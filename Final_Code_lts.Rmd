@@ -506,6 +506,7 @@ rpart.fit1 <- train(train.x,
                    method = "rpart",
                    tuneGrid = rpart_grid,
                    trControl = ctrl1)
+
 ggplot(rpart.fit1, highlight = TRUE) +
   labs(titlem = "Regression Tree CV Result") +
   theme_bw()
@@ -675,16 +676,13 @@ dev.off()
 
 ## Model Training
 
-### Logistic Regression
-
-```{r logistic}
+```{r ctrl2}
 ctrl2 <- trainControl(method = "cv",
                      summaryFunction = twoClassSummary,
                      classProbs = TRUE)
-
-
-
 ```
+
+### Logistic Regression
 
 
 ### Penalized Logistic Regression
@@ -712,7 +710,7 @@ ctrl2 <- trainControl(method = "cv",
 
 ### Classification Trees
 
-```{r rpart}
+```{r rpart_classification}
 rpart_grid = expand.grid(cp = exp(seq(-6,-4, len = 50)))
 set.seed(2023)
 rpart.fit2 <- train(train.x, 
@@ -737,30 +735,9 @@ dev.off()
 
 ### Support Vector Machine (SVM)
 
-```{r svml}
-svml.gird <- expand.grid(C = exp(seq(-100, -50, len = 20)))
-set.seed(2023)
-svml.fit <- train(train.x, 
-                  train.bin.y,
-                  method = "svmLinear",
-                  tuneGrid = svml.gird, 
-                  trControl = ctrl1)
-
-svml.fit$bestTune
-
-ggplot(svml.fit, highlight = TRUE, xTrans = log) + 
-  labs(title = "SVM Linear CV result") + 
-  theme_bw()
-
-ggsave("./figure/svml_cv.jpeg", dpi = 500)
-
-
-```
-
-
 ```{r svmr}
 svmr.grid <- expand.grid(C = exp(seq(-3, 3, len = 10)),
-                         sigma = exp(seq(-3, 0, len = 6)))
+                         sigma = exp(seq(-4, -1, len = 6)))
 
 set.seed(2023)
 svmr.fit <- train(train.x, 
