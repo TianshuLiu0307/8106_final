@@ -36,6 +36,7 @@ library(corrplot)
 library(caret)
 library(vip)
 library(rpart.plot)
+library(ranger)
 ```
 
 # Data Import
@@ -122,6 +123,9 @@ trainRows <- createDataPartition(y = dat$recovery_time, p = 0.8, list = FALSE)
 
 train.dat <- dat[trainRows,]
 train.bin.dat <- bin.dat[trainRows,]
+
+train.dat.matrix <- model.matrix(~., train.dat)[, -1]
+train.bin.dat.matrix <- model.matrix(~., train.bin.dat)[, -1]
 
 train.x <- dat.matrix[trainRows,]
 train.y <- dat$recovery_time[trainRows]
@@ -269,10 +273,14 @@ dev.off()
 ```
 
 ## Model Training
+
+```{r ctrl1}
+ctrl1 <- trainControl(method = "cv", number = 5)
+```
+
 ### Linear Model
 
 ```{r linear}
-ctrl1 <- trainControl(method = "cv")
 set.seed(2023)
 
 lm.fit <- train(train.x, train.y,
@@ -433,13 +441,13 @@ par(mfrow=c(1, 1))
 ### Multivariate Adaptive Regression Splines (MARS)
 
 ```{r mars}
-mars_grid <- expand.grid(degree = 1:3,
+mars.grid <- expand.grid(degree = 1:3,
                          nprune = 2:15)
 set.seed(2023)
 mars.fit <- train(train.x, 
                   train.y,
                   method = "earth",
-                  tuneGrid = mars_grid,
+                  tuneGrid = mars.grid,
                   trControl = ctrl1)
 
 ggplot(mars.fit, highlight = TRUE)+ 
@@ -478,33 +486,125 @@ knn.fit$bestTune
 
 ### Bagging
 
-```{r bagging}
+```{r bagging, cache=TRUE}
+bag.grid <- expand.grid(mtry = ncol(train.x),
+                       splitrule = "variance",
+                       min.node.size = 1:10)
+set.seed(2023)
+bag.fit <- train(train.x, 
+                 train.y,
+                 method = "ranger",
+                 tuneGrid = bag.grid, 
+                 trControl = ctrl1)
 
+bag.fit$bestTune
+
+ggplot(bag.fit, highlight = TRUE) + 
+  labs(title = "Bagging CV Result") + 
+  theme_bw()
+ggsave("./figure/bagging_cv.jpeg", dpi = 500)
+
+bag.final.per <- ranger(recovery_time ~ .,
+                        data = train.dat.matrix, 
+                        mtry = ncol(train.x),
+                       splitrule = "variance",
+                       min.node.size = bag.fit$bestTune[[3]],
+                       importance = "permutation",
+                       scale.permutation.importance = TRUE)
+
+barplot(sort(ranger::importance(bag.final.per), 
+             decreasing = FALSE),
+        las = 2, horiz = TRUE, cex.names = 0.7,
+        col = colorRampPalette(colors = c("cyan","blue"))(ncol(train.x)))
+
+# p1 <- pdp::partial(
+#   bag.fit, 
+#   pred.var = "Lot_Area",
+#   grid.resolution = 20
+#   ) %>% 
+#   autoplot()
+# p2 <- pdp::partial(
+#   bag.fit, 
+#   pred.var = "Lot_Frontage", 
+#   grid.resolution = 20
+#   ) %>% 
+#   autoplot()
+# gridExtra::grid.arrange(p1, p2, nrow = 1)
 ```
 
 
 ### Random Forest
 
-```{r rf}
+```{r rf, cache=TRUE}
+rf.grid <- expand.grid(mtry = 1:ncol(train.x),
+                       splitrule = "variance",
+                       min.node.size = 1:10)
+set.seed(2023)
+rf.fit <- train(train.x, 
+                train.y,
+                method = "ranger",
+                tuneGrid = rf.grid,
+                trControl = ctrl1)
 
+rf.fit$bestTune
+
+ggplot(rf.fit, highlight = TRUE) + 
+  labs(title = "Random Forest CV Result") + 
+  theme_bw()
+ggsave("./figure/rf_cv.jpeg", dpi = 500)
+
+rf.final.per <- ranger(recovery_time ~ .,
+                       data = train.dat.matrix, 
+                       mtry = rf.fit$bestTune[[1]],
+                       splitrule = "variance",
+                       min.node.size = rf.fit$bestTune[[3]],
+                       importance = "permutation",
+                       scale.permutation.importance = TRUE)
+
+barplot(sort(ranger::importance(rf.final.per), decreasing = FALSE),
+        las = 2, horiz = TRUE, cex.names = 0.7,
+        col = colorRampPalette(colors = c("cyan","blue"))(ncol(train.x)))
 ```
 
 
 ### Boosting
 
-```{r boosting}
+```{r boosting, cache=TRUE}
+set.seed(2023)
+bst.grid <- expand.grid(n.trees = c(6000, 7000, 8000),
+                        interaction.depth = 1:5,
+                        shrinkage = c(0.0005, 0.001,0.005),
+                        n.minobsinnode = c(1,10))
 
+bst.fit <- train(train.x, 
+                 train.y,
+                 method = "gbm",
+                 tuneGrid = bst.grid,
+                 trControl = ctrl1,
+                 verbose = FALSE)
+
+bst.fit$bestTune
+
+ggplot(bst.fit, highlight = TRUE) + 
+  labs(title = "Boosting CV Result") + 
+  theme_bw()
+
+ggsave("./figure/boosting_cv.jpeg", dpi = 500)
+
+# Variable Importance
+summary(bst.fit$finalModel, las = 2, cBars = ncol(train.x), cex.names = 0.6)
 ```
+
 
 ### Regression Trees
 
 ```{r rpart}
-rpart_grid <- expand.grid(cp = exp(seq(-5,-2, length = 50)))
+rpart.grid <- expand.grid(cp = exp(seq(-5,-2, length = 50)))
 set.seed(2023)
 rpart.fit1 <- train(train.x, 
                    train.y,
                    method = "rpart",
-                   tuneGrid = rpart_grid,
+                   tuneGrid = rpart.grid,
                    trControl = ctrl1)
 
 ggplot(rpart.fit1, highlight = TRUE) +
@@ -535,15 +635,23 @@ resamp <- resamples(list(lm = lm.fit,
                          pls = pls.fit,
                          gam = gam.fit,
                          mars = mars.fit,
-                         knn = knn.fit))
+                         knn = knn.fit, 
+                         bagging = bag.fit, 
+                         rf = rf.fit,
+                         boosting = bst.fit,
+                         tree = rpart.fit1))
 
 summary(resamp)
 
-# jpeg("./figure/resample.jpeg", width = 8, height=6, units="in", res=500)
 p1=bwplot(resamp, metric = "RMSE")
 p2=bwplot(resamp, metric = "Rsquared")
 grid.arrange(p1, p2 ,ncol=2)
-# dev.off()
+
+jpeg("./figure/resample1.jpeg", width = 8, height=6, units="in", res=500)
+p1=bwplot(resamp, metric = "RMSE")
+p2=bwplot(resamp, metric = "Rsquared")
+grid.arrange(p1, p2, ncol=2)
+dev.off()
 ```
 
 ```{r interpret}
@@ -677,21 +785,105 @@ dev.off()
 ## Model Training
 
 ```{r ctrl2}
+contrasts(train.bin.y)
 ctrl2 <- trainControl(method = "cv",
+                      number = 5, 
                      summaryFunction = twoClassSummary,
                      classProbs = TRUE)
 ```
 
 ### Logistic Regression
 
+```{r logistic}
+glm.fit <- train(x = train.x, 
+                 y = train.bin.y,
+                 method = 'glm',
+                 metric = 'ROC',
+                 trControl = ctrl2)
+coef(glm.fit$finalModel)
+vip(glm.fit$finalModel) + theme_bw()
+```
+
 
 ### Penalized Logistic Regression
 
+```{r plr}
+glmnGrid <- expand.grid(.alpha = seq(0, 1, length = 21),
+                        .lambda = exp(seq(-10, -5, length = 20)))
+set.seed(2023)
+glmn.fit <- train(train.x, 
+                  train.bin.y,
+                  method = 'glmnet',
+                  tuneGrid = glmnGrid,
+                  metric = 'ROC',
+                  trControl = ctrl2)
+
+glmn.fit$bestTune
+
+myCol<- rainbow(25)
+myPar <- list(superpose.symbol = list(col = myCol), 
+              superpose.line = list(col = myCol))
+ggplot(glmn.fit, highlight = TRUE) + 
+  labs(title="Penalized Logistic Regression CV Result") +
+  scale_x_continuous(trans='log',n.breaks = 10) +
+  theme_bw()
+
+ggsave("./figure/penal_logi_cv.jpeg", dpi = 500)
+
+#coef(glmn.fit$finalModel)
+vip(glmn.fit$finalModel) + theme_bw()
+```
 
 
 ### Generalized Additive Model (GAM) for classification
 
+```{r binarygam}
+set.seed(2023)
+gam.bin.fit <- train(train.x, 
+                     train.bin.y,
+                     method = "gam",
+                     metric = "ROC",
+                     trControl = ctrl2)
+
+ggplot(gam.bin.fit) +
+  labs(title = "GAM Classification CV Result") + 
+  theme_bw()
+ggsave("./figure/gam_binned_cv.jpeg", dpi = 500)
+
+gam.bin.fit$bestTune
+# coef(gam.fit$finalModel)
+
+par(mfrow=c(2, 3))
+plot(gam.bin.fit$finalModel)
+par(mfrow=c(1, 1))
+```
+
+
 ### Multivariate Adaptive Regression Splines (MARS) for classification
+
+```{r binaryMars}
+set.seed(2023)
+mars.bin.fit <- train(train.x, 
+                      train.bin.y,
+                      method = "earth",
+                      tuneGrid = expand.grid(degree = 1:3,
+                                             nprune = 2:15),
+                      metric = "ROC",
+                      trControl = ctrl2)
+ggplot(mars.bin.fit, highlight = TRUE)+ 
+  labs(title  ="MARS Classification CV Result") +
+  theme_bw()
+
+ggsave("./figure/mars_binned_cv.jpeg", dpi = 500)
+
+mars.bin.fit$bestTune
+
+coef(mars.bin.fit$finalModel) %>% 
+  broom::tidy() %>% 
+  knitr::kable()
+summary(mars.bin.fit$finalModel)
+vip(mars.bin.fit$finalModel) + theme_bw()
+```
 
 ### Linear Discriminant Analysis (LDA)
 
@@ -710,13 +902,13 @@ ctrl2 <- trainControl(method = "cv",
 
 ### Classification Trees
 
-```{r rpart_classification}
-rpart_grid = expand.grid(cp = exp(seq(-6,-4, len = 50)))
+```{r binarytree}
+rpart.grid = expand.grid(cp = exp(seq(-6,-4, len = 50)))
 set.seed(2023)
 rpart.fit2 <- train(train.x, 
                    train.bin.y, 
                    method = "rpart",
-                   tuneGrid = rpart_grid,
+                   tuneGrid = rpart.grid,
                    trControl = ctrl2,
                    metric = "ROC")
 rpart.fit2$bestTune
@@ -735,7 +927,7 @@ dev.off()
 
 ### Support Vector Machine (SVM)
 
-```{r svmr}
+```{r svmr, cache=TRUE}
 svmr.grid <- expand.grid(C = exp(seq(-3, 3, len = 10)),
                          sigma = exp(seq(-4, -1, len = 6)))
 
