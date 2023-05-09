@@ -405,6 +405,8 @@ ggplot(svml.fit, highlight = TRUE) +
   scale_x_continuous(trans='log',n.breaks = 10) +
   labs(title = "SVM Linear CV result") + 
   theme_bw()
+
+
 ```
 
 
@@ -429,8 +431,6 @@ ggplot(svmr.fit, highlight = TRUE, par.settings = myPar) +
   theme_bw()
 
 ggsave("./figure/svmr_cv.jpeg", dpi = 500)
-
-confusionMatrix(svmr.fit)
 ```
 
 
@@ -438,7 +438,7 @@ confusionMatrix(svmr.fit)
 
 ```{r resample2}
 set.seed(2023)
-resamp <- resamples(list(glm = glm.fit, 
+resamp2 <- resamples(list(glm = glm.fit, 
                          glmnet = glmn.fit,
                          gam = gam.bin.fit, 
                          mars = mars.bin.fit, 
@@ -449,26 +449,34 @@ resamp <- resamples(list(glm = glm.fit,
                          rf = rf.fit2,
                          boosting = bst.fit2, 
                          tree = rpart.fit2, 
-                         svml <- svml.fit, 
+                         svml = svml.fit, 
                          svmr = svmr.fit))
 
-summary(resamp)
+summary(resamp2)
 
-p1=bwplot(resamp, metric = "Accuracy")
-p2=bwplot(resamp, metric = "Kappa")
+p1=bwplot(resamp2, metric = "Accuracy")
+p2=bwplot(resamp2, metric = "Kappa")
 grid.arrange(p1, p2 ,ncol=2)
 
 jpeg("./figure/resample2.jpeg", width = 8, height=6, units="in", res=500)
-p1=bwplot(resamp, metric = "Accuracy")
-p2=bwplot(resamp, metric = "Kappa")
+p1=bwplot(resamp2, metric = "Accuracy")
+p2=bwplot(resamp2, metric = "Kappa")
 grid.arrange(p1, p2, ncol=2)
 dev.off()
 ```
 
+
 ## Training  / Testing Error
 
 ```{r testerror}
-pred.svmr <- predict(svmr.fit, newdata = test.x)
-confusionMatrix(data = pred.svmr, reference = test.bin.y)
+# svmr error
+# training
+pred.svmr.train <- predict(svmr.fit, newdata = train.x)
+confusionMatrix(data = pred.svmr.train, reference = train.bin.y)
+
+# test
+pred.svmr.test <- predict(svmr.fit, newdata = test.x)
+confusionMatrix(data = pred.svmr.test, reference = test.bin.y)
+
 ```
 

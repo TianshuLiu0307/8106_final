@@ -436,8 +436,8 @@ barplot(sort(ranger::importance(rf.final.per), decreasing = FALSE),
 set.seed(2023)
 bst.grid <- expand.grid(n.trees = c(2000, 3000, 4000),
                         interaction.depth = 1:4,
-                        shrinkage = c(0.0025, 0.005, 0.01),
-                        n.minobsinnode = c(1))
+                        shrinkage = c(0.001, 0.0025, 0.005),
+                        n.minobsinnode = c(1, 10))
 
 bst.fit <- train(train.x, 
                  train.y,
@@ -447,6 +447,8 @@ bst.fit <- train(train.x,
                  verbose = FALSE)
 
 bst.fit$bestTune
+
+bst.fit$finalModel
 
 ggplot(bst.fit, highlight = TRUE) + 
   labs(title = "Boosting CV Result") + 
@@ -552,7 +554,7 @@ ggsave(plot = p, filename = "./primary_cv.jpeg", dpi = 500)
 
 ```{r resample1}
 set.seed(2023)
-resamp <- resamples(list(lm = lm.fit,
+resamp1 <- resamples(list(lm = lm.fit,
                          lasso = lasso.fit,
                          ridge = ridge.fit,
                          enet = enet.fit,
@@ -566,15 +568,15 @@ resamp <- resamples(list(lm = lm.fit,
                          boosting = bst.fit,
                          tree = rpart.fit1))
 
-summary(resamp)
+summary(resamp1)
 
-p1=bwplot(resamp, metric = "RMSE")
-p2=bwplot(resamp, metric = "Rsquared")
+p1=bwplot(resamp1, metric = "RMSE")
+p2=bwplot(resamp1, metric = "Rsquared")
 grid.arrange(p1, p2 ,ncol=2)
 
 jpeg("./figure/resample1.jpeg", width = 8, height=6, units="in", res=500)
-p1=bwplot(resamp, metric = "RMSE")
-p2=bwplot(resamp, metric = "Rsquared")
+p1=bwplot(resamp1, metric = "RMSE")
+p2=bwplot(resamp1, metric = "Rsquared")
 grid.arrange(p1, p2, ncol=2)
 dev.off()
 ```
@@ -595,6 +597,13 @@ gridExtra::grid.arrange(p1, p2, ncol = 2)
 
 jpeg("./figure/partial_dependence.jpeg", width = 8, height=6, units="in", res=500)
 gridExtra::grid.arrange(p1, p2, ncol = 2)
+dev.off()
+
+# Variable Importance
+summary(bst.fit$finalModel, las = 2, cBars = ncol(train.x), cex.names = 0.6)
+
+jpeg("./figure/bst.importance.jpeg", width = 8, height=6, units="in", res=500)
+summary(bst.fit$finalModel, las = 2, cBars = ncol(train.x), cex.names = 0.6)
 dev.off()
 ```
 

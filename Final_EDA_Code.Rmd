@@ -148,10 +148,6 @@ skimr::skim_without_charts(train.dat)
 
 
 ```{r pri_eda, fig.show='true'}
-####################################################################
-## Remember to edit the next chunk if you do any modification here:)
-####################################################################
-
 # EDA
 cts_var = c("age", "height", "weight", "bmi", "SBP", "LDL")
 fct_var = c("gender", "race", "smoking", "hypertension", "diabetes", "vaccine", "severity", "study")
@@ -281,9 +277,6 @@ skimr::skim_without_charts(train.bin.dat)
 
 
 ```{r sec_eda, fig.show='true'}
-####################################################################
-## Remember to edit the next chunk if you do any modification here:)
-####################################################################
 # EDA
 
 # boxplot of continuous predictors
