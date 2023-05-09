@@ -1,0 +1,620 @@
+---
+title: "Final Primary Analysis"
+author: "Tianshu Liu, Lincole Jiang, Jiong Ma"
+output:
+  pdf_document:
+    toc: yes
+    toc_depth: 3
+    number_sections: true
+  html_document:
+    df_print: paged
+    toc: yes
+    toc_depth: '3'
+header-includes:
+- \usepackage{fancyhdr}
+- \usepackage{lipsum}
+- \pagestyle{fancy}
+- \fancyhead[R]{\thepage}
+- \fancypagestyle{plain}{\pagestyle{fancy}}
+editor_options: 
+  chunk_output_type: console
+---
+\newpage
+
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, 
+                      message = FALSE, 
+                      warning = FALSE)
+```
+
+```{r library}
+library(tidyverse)
+library(summarytools)
+library(corrplot)
+library(caret)
+library(vip)
+library(rpart.plot)
+library(ranger)
+```
+
+
+```{r import_data, include=FALSE}
+# import data
+load("./recovery.RData")
+
+set.seed(3196) 
+lts.dat <- dat[sample(1:10000, 2000),]
+set.seed(2575)
+lincole.dat <- dat[sample(1:10000, 2000),]
+set.seed(5509)
+amy.dat <- dat[sample(1:10000, 2000),]
+
+dat1 <- lts.dat %>% 
+  merge(lincole.dat, all = TRUE) %>% 
+  na.omit() %>% 
+  select(-id) %>% 
+  mutate(
+    gender = as.factor(gender),
+    race = as.factor(race),
+    smoking = as.factor(smoking),
+    hypertension = as.factor(hypertension),
+    diabetes = as.factor(diabetes),
+    vaccine = as.factor(vaccine),
+    severity = as.factor(severity),
+    study = as.factor(study))
+  
+dat2 <- lts.dat %>% 
+  merge(amy.dat, all = TRUE) %>% 
+  na.omit() %>% 
+  select(-id) %>% 
+  mutate(
+    gender = as.factor(gender),
+    race = as.factor(race),
+    smoking = as.factor(smoking),
+    hypertension = as.factor(hypertension),
+    diabetes = as.factor(diabetes),
+    vaccine = as.factor(vaccine),
+    severity = as.factor(severity),
+    study = as.factor(study))
+
+dat3 <- lincole.dat %>% 
+  merge(amy.dat, all = TRUE) %>% 
+  na.omit() %>% 
+  select(-id) %>% 
+  mutate(
+    gender = as.factor(gender),
+    race = as.factor(race),
+    smoking = as.factor(smoking),
+    hypertension = as.factor(hypertension),
+    diabetes = as.factor(diabetes),
+    vaccine = as.factor(vaccine),
+    severity = as.factor(severity),
+    study = as.factor(study))
+
+dat <- dat1
+summary(dat)
+
+bin.dat <- dat %>% 
+  mutate(recovery_time = ifelse(recovery_time > 30, "gt30", "lt30")) %>% 
+  mutate(recovery_time = factor(recovery_time, levels = c("lt30", "gt30")))
+
+summary(bin.dat)
+```
+
+
+```{r data_partition, include=FALSE}
+# data partition
+set.seed(2023)
+dat.matrix <- model.matrix(recovery_time ~ ., dat)[ ,-1]
+
+
+trainRows <- createDataPartition(y = dat$recovery_time, p = 0.8, list = FALSE)
+
+train.dat <- dat[trainRows,]
+train.bin.dat <- bin.dat[trainRows,]
+
+train.dat.matrix <- model.matrix(~., train.dat)[, -1]
+train.bin.dat.matrix <- train.dat.matrix %>% 
+  as.data.frame() %>% 
+ mutate(recovery_time = ifelse(recovery_time > 30, "gt30", "lt30")) %>% 
+  mutate(recovery_time = factor(recovery_time, levels = c("lt30", "gt30"))) 
+
+train.x <- dat.matrix[trainRows,]
+train.y <- dat$recovery_time[trainRows]
+train.bin.y <- bin.dat$recovery_time[trainRows]
+
+test.x <- dat.matrix[-trainRows,]
+test.y <- dat$recovery_time[-trainRows]
+test.bin.y <- bin.dat$recovery_time[-trainRows]
+```
+
+# Model Training
+
+## Primary Analysis
+
+```{r ctrl1}
+ctrl1 <- trainControl(method = "cv", number = 10)
+```
+
+### Linear Model
+
+```{r linear}
+set.seed(2023)
+
+lm.fit <- train(train.x, train.y,
+               method = "lm",
+               trControl = ctrl1)
+
+coef(lm.fit$finalModel)
+
+vip(lm.fit$finalModel)
+```
+
+### LASSO
+
+```{r lasso}
+set.seed(2023)
+lasso.fit <- train(train.x, train.y,
+                   method = "glmnet",
+                   tuneGrid = expand.grid(
+                     alpha = 1,
+                     lambda = exp(seq(0, -7, length=100))),
+                   trControl = ctrl1)
+
+lasso.fit$bestTune
+
+coef(lasso.fit$finalModel, s = lasso.fit$bestTune$lambda)
+
+ggplot(lasso.fit, highlight = TRUE) + 
+  labs(title="LASSO CV Result") +
+  scale_x_continuous(trans='log',n.breaks = 10) +
+  theme_bw()
+ggsave("./figure/lasso_cv.jpeg", dpi = 500)
+
+vip(lasso.fit$finalModel)
+```
+
+
+### Ridge
+
+```{r ridge}
+set.seed(2023)
+ridge.fit <- train(train.x, train.y,
+                   method = "glmnet",
+                   tuneGrid = expand.grid(alpha = 0,
+                                          lambda = exp(seq(1, -5, length=100))), 
+                   trControl = ctrl1)
+
+ridge.fit$bestTune
+
+coef(ridge.fit$finalModel, s = ridge.fit$bestTune$lambda)
+
+ggplot(ridge.fit,highlight = TRUE) + 
+  scale_x_continuous(trans='log', n.breaks = 6) +
+  labs(title="Ridge CV Result") +
+  theme_bw()
+ggsave("./figure/ridge_cv.jpeg", dpi = 500)
+
+vip(ridge.fit$finalModel)
+```
+
+
+### Elastic Net
+
+```{r enet}
+set.seed(2023)
+enet.fit <- train(train.x, train.y,
+                  method = "glmnet",
+                  tuneGrid = expand.grid(
+                    alpha = seq(0, 1, length = 11),
+                    lambda = exp(seq(0, -8, length = 50))),
+                  trControl = ctrl1)
+
+enet.fit$bestTune
+
+coef(enet.fit$finalModel, enet.fit$bestTune$lambda)
+
+
+ggplot(enet.fit, highlight = TRUE) + 
+  scale_x_continuous(trans='log', n.breaks = 6) +
+  labs(title ="Elastic Net CV Result") + 
+  theme_bw()
+
+ggsave("./figure/enet_cv.jpeg", dpi = 500)
+
+vip(enet.fit$finalModel)
+```
+
+### Principal components regression (PCR)
+
+```{r pcr}
+set.seed(2023)
+pcr.fit <- train(train.x, 
+                 train.y,
+                 method = "pcr",
+                 tuneGrid  = data.frame(ncomp = 1:ncol(train.x)),
+                 trControl = ctrl1,
+                 preProcess = c("center", "scale"))
+ggplot(pcr.fit, highlight = TRUE) + 
+  labs(title  ="PCR CV Result") +
+  theme_bw()
+
+ggsave("./figure/pcr_cv.jpeg", dpi = 500)
+
+pcr.fit$bestTune
+coef(pcr.fit$finalModel)
+
+vip(pcr.fit$finalModel)
+```
+
+### Partial Least Squares (PLS)
+
+```{r pls}
+set.seed(2023)
+pls.fit <- train(train.x, 
+                 train.y,
+                 method = "pls",
+                 tuneGrid = data.frame(ncomp = 1:ncol(train.x)),
+                 trControl = ctrl1,
+                 preProcess = c("center", "scale"))
+ggplot(pls.fit, highlight = TRUE) + 
+  labs(title  ="PLS CV Result") +
+  theme_bw()
+
+ggsave("./figure/pls_cv.jpeg", dpi = 500)
+
+pls.fit$bestTune
+coef(pls.fit$finalModel)
+
+vip(pls.fit$finalModel)
+```
+
+### Generalized Additive Model (GAM)
+
+```{r gam}
+set.seed(2023)
+gam.fit <- train(train.x, 
+                 train.y,
+                 method = "gam",
+                 tuneGrid = data.frame(select = c(TRUE, FALSE), 
+                                       method = "GCV.Cp"),
+                 trControl = ctrl1)
+
+
+ggplot(gam.fit) +
+  labs(title = "GAM CV Result") + 
+  theme_bw()
+ggsave("./figure/gam_cv.jpeg", dpi = 500)
+
+gam.fit$bestTune
+
+# coef(gam.fit$finalModel)
+gam.fit$finalModel
+
+par(mfrow=c(2, 3))
+plot(gam.fit$finalModel)
+par(mfrow=c(1, 1))
+```
+
+### Multivariate Adaptive Regression Splines (MARS)
+
+```{r mars}
+mars.grid <- expand.grid(degree = 1:5,
+                         nprune = 2:14)
+set.seed(2023)
+mars.fit <- train(train.x, 
+                  train.y,
+                  method = "earth",
+                  tuneGrid = mars.grid,
+                  trControl = ctrl1)
+
+ggplot(mars.fit, highlight = TRUE)+ 
+  labs(title  ="MARS CV Result") +
+  theme_bw()
+
+ggsave("./figure/mars_cv.jpeg", dpi = 500)
+
+mars.fit$bestTune
+
+coef(mars.fit$finalModel)
+
+summary(mars.fit$finalModel)
+
+vip(mars.fit$finalModel)
+```
+
+### K-Nearest Neighbour (KNN)
+
+```{r knn}
+set.seed(2023)
+knn.fit <- train(train.x, 
+                train.y,
+                tuneGrid  = data.frame(k = 1:20),
+                method = "knn",
+                trControl = ctrl1)
+
+ggplot(knn.fit, highlight = TRUE) + 
+  labs(title  ="KNN CV Result") +
+  theme_bw()
+
+ggsave("./figure/knn_cv.jpeg", dpi = 500)
+
+knn.fit$bestTune
+```
+
+### Bagging
+
+```{r bagging}
+bag.grid <- expand.grid(mtry = ncol(train.x),
+                       splitrule = "variance",
+                       min.node.size = 1:20) 
+
+set.seed(2023)
+bag.fit <- train(train.x, 
+                 train.y,
+                 method = "ranger",
+                 tuneGrid = bag.grid, 
+                 trControl = ctrl1)
+
+bag.fit$bestTune
+
+ggplot(bag.fit, highlight = TRUE) + 
+  labs(title = "Bagging CV Result") + 
+  theme_bw()
+
+ggsave("./figure/bagging_cv.jpeg", dpi = 500)
+
+bag.final.per <- ranger(recovery_time ~ .,
+                        data = train.dat.matrix, 
+                        mtry = ncol(train.x),
+                       splitrule = "variance",
+                       min.node.size = bag.fit$bestTune[[3]],
+                       importance = "permutation",
+                       scale.permutation.importance = TRUE)
+
+barplot(sort(ranger::importance(bag.final.per), 
+             decreasing = FALSE),
+        las = 2, horiz = TRUE, cex.names = 0.7,
+        col = colorRampPalette(colors = c("cyan","blue"))(ncol(train.x)))
+
+# p1 <- pdp::partial(
+#   bag.fit, 
+#   pred.var = "Lot_Area",
+#   grid.resolution = 20
+#   ) %>% 
+#   autoplot()
+# p2 <- pdp::partial(
+#   bag.fit, 
+#   pred.var = "Lot_Frontage", 
+#   grid.resolution = 20
+#   ) %>% 
+#   autoplot()
+# gridExtra::grid.arrange(p1, p2, nrow = 1)
+```
+
+
+### Random Forest
+
+```{r rf}
+rf.grid <- expand.grid(mtry = 1:ncol(train.x),
+                       splitrule = "variance",
+                       min.node.size = seq(12, 18, by = 2))
+set.seed(2023)
+rf.fit <- train(train.x, 
+                train.y,
+                method = "ranger",
+                tuneGrid = rf.grid,
+                trControl = ctrl1)
+
+rf.fit$bestTune
+
+ggplot(rf.fit, highlight = TRUE) + 
+  labs(title = "Random Forest CV Result") + 
+  theme_bw()
+
+ggsave("./figure/rf_cv.jpeg", dpi = 500)
+
+rf.final.per <- ranger(recovery_time ~ .,
+                       data = train.dat.matrix, 
+                       mtry = rf.fit$bestTune[[1]],
+                       splitrule = "variance",
+                       min.node.size = rf.fit$bestTune[[3]],
+                       importance = "permutation",
+                       scale.permutation.importance = TRUE)
+
+barplot(sort(ranger::importance(rf.final.per), decreasing = FALSE),
+        las = 2, horiz = TRUE, cex.names = 0.7,
+        col = colorRampPalette(colors = c("cyan","blue"))(ncol(train.x)))
+```
+
+
+### Boosting
+
+```{r boosting}
+set.seed(2023)
+bst.grid <- expand.grid(n.trees = c(2000, 3000, 4000),
+                        interaction.depth = 1:4,
+                        shrinkage = c(0.0025, 0.005, 0.01),
+                        n.minobsinnode = c(1))
+
+bst.fit <- train(train.x, 
+                 train.y,
+                 method = "gbm",
+                 tuneGrid = bst.grid,
+                 trControl = ctrl1,
+                 verbose = FALSE)
+
+bst.fit$bestTune
+
+ggplot(bst.fit, highlight = TRUE) + 
+  labs(title = "Boosting CV Result") + 
+  theme_bw()
+
+ggsave("./figure/boosting_cv.jpeg", dpi = 500)
+
+# Variable Importance
+summary(bst.fit$finalModel, las = 2, cBars = ncol(train.x), cex.names = 0.6)
+```
+
+
+### Regression Trees
+
+```{r rpart}
+rpart.grid <- expand.grid(cp = exp(seq(-6,-3, length = 20)))
+set.seed(2023)
+rpart.fit1 <- train(train.x, 
+                   train.y,
+                   method = "rpart",
+                   tuneGrid = rpart.grid,
+                   trControl = ctrl1)
+
+ggplot(rpart.fit1, highlight = TRUE) +
+  labs(titlem = "Regression Tree CV Result") +
+  theme_bw()
+
+ggsave("./figure/rpart1_cv.jpeg", dpi = 500)
+
+rpart.fit1$bestTune
+
+rpart.plot(rpart.fit1$finalModel)
+
+jpeg("./figure/rpart1.jpeg", width = 8, height = 6, units="in", res=500)
+rpart.plot(rpart.fit1$finalModel)
+dev.off()
+```
+
+```{r mergecvplots}
+library(patchwork)
+lasso <- ggplot(lasso.fit, highlight = TRUE) + 
+  labs(title="LASSO CV Result") +
+  scale_x_continuous(trans='log',n.breaks = 10) +
+  theme_bw()
+
+ridge <- ggplot(ridge.fit,highlight = TRUE) + 
+  scale_x_continuous(trans='log', n.breaks = 6) +
+  labs(title="Ridge CV Result") +
+  theme_bw()
+
+enet <- ggplot(enet.fit, highlight = TRUE) + 
+  scale_x_continuous(trans='log', n.breaks = 6) +
+  labs(title ="Elastic Net CV Result") + 
+  theme_bw()
+
+pcr <- ggplot(pcr.fit, highlight = TRUE) + 
+  labs(title  ="PCR CV Result") +
+  theme_bw()
+  
+pls <- ggplot(pls.fit, highlight = TRUE) + 
+  labs(title  ="PLS CV Result") +
+  theme_bw()
+  
+gam <- ggplot(gam.fit) +
+  labs(title = "GAM CV Result") + 
+  theme_bw()
+
+mars <- ggplot(mars.fit, highlight = TRUE)+ 
+  labs(title  ="MARS CV Result") +
+  theme_bw()
+
+knn <- ggplot(knn.fit, highlight = TRUE) + 
+  labs(title  ="KNN CV Result") +
+  theme_bw()
+
+bagging <- ggplot(bag.fit, highlight = TRUE) + 
+  labs(title = "Bagging CV Result") + 
+  theme_bw()
+  
+rf <- ggplot(rf.fit, highlight = TRUE) + 
+  labs(title = "Random Forest CV Result") + 
+  theme_bw()
+  
+boosting <- ggplot(bst.fit, highlight = TRUE) + 
+  labs(title = "Boosting CV Result") + 
+  theme_bw()
+  
+tree <- ggplot(rpart.fit1, highlight = TRUE) +
+  labs(titlem = "Regression Tree CV Result") +
+  theme_bw()
+
+p <- wrap_plots(enet, pcr, 
+           pls,
+           mars, knn, 
+           bagging, rf, boosting, tree, 
+           ncol = 3)
+p
+ggsave(plot = p, filename = "./primary_cv.jpeg", dpi = 500)
+```
+
+
+## Model Selection
+
+```{r resample1}
+set.seed(2023)
+resamp <- resamples(list(lm = lm.fit,
+                         lasso = lasso.fit,
+                         ridge = ridge.fit,
+                         enet = enet.fit,
+                         pcr = pcr.fit,
+                         pls = pls.fit,
+                         gam = gam.fit,
+                         mars = mars.fit,
+                         knn = knn.fit, 
+                         bagging = bag.fit, 
+                         rf = rf.fit,
+                         boosting = bst.fit,
+                         tree = rpart.fit1))
+
+summary(resamp)
+
+p1=bwplot(resamp, metric = "RMSE")
+p2=bwplot(resamp, metric = "Rsquared")
+grid.arrange(p1, p2 ,ncol=2)
+
+jpeg("./figure/resample1.jpeg", width = 8, height=6, units="in", res=500)
+p1=bwplot(resamp, metric = "RMSE")
+p2=bwplot(resamp, metric = "Rsquared")
+grid.arrange(p1, p2, ncol=2)
+dev.off()
+```
+
+```{r interpret}
+p1<- pdp::partial(bst.fit, pred.var = c("bmi"), grid.resolution = 10) %>% autoplot() + 
+  theme_bw()+ 
+  labs(title = "Partial Dependence Plots of Boosting Model")
+
+p2 <-pdp::partial(bst.fit, pred.var = c("bmi", "studyB"),
+                   grid.resolution = 10) %>%
+      pdp::plotPartial(levelplot = FALSE, zlab = "yhat", drape = TRUE,
+                       screen = list(z = 20, x = -60))
+
+# jpeg("./figure/partial_dependence.jpeg", width = 8, height=6, units="in", res=500)
+gridExtra::grid.arrange(p1, p2, ncol = 2)
+# dev.off()
+
+jpeg("./figure/partial_dependence.jpeg", width = 8, height=6, units="in", res=500)
+gridExtra::grid.arrange(p1, p2, ncol = 2)
+dev.off()
+```
+
+## Training / Testing Error
+
+```{r err}
+# boosting
+# training error
+bst.train.pred <- predict(bst.fit, newdata = train.x)
+RMSE(bst.train.pred, train.y)
+# test error
+bst.test.pred <- predict(bst.fit, newdata = test.x)
+RMSE(bst.test.pred, test.y)
+
+# mars
+# training error
+mars.train.pred = predict(mars.fit, newdata = train.x)
+RMSE(train.y, mars.train.pred)
+
+# testing error
+mars.pred = predict(mars.fit, newdata = test.x)
+RMSE(test.y, mars.pred)
+```

@@ -1,0 +1,361 @@
+---
+title: "Final EDA"
+author: "Tianshu Liu, Lincole Jiang, Jiong Ma"
+output:
+  pdf_document:
+    toc: yes
+    toc_depth: 2
+    number_sections: true
+  html_document:
+    df_print: paged
+    toc: yes
+    toc_depth: '3'
+header-includes:
+- \usepackage{fancyhdr}
+- \usepackage{lipsum}
+- \pagestyle{fancy}
+- \fancyhead[R]{\thepage}
+- \fancypagestyle{plain}{\pagestyle{fancy}}
+editor_options: 
+  chunk_output_type: console
+---
+\newpage
+
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, 
+                      message = FALSE, 
+                      warning = FALSE)
+```
+
+```{r library}
+library(tidyverse)
+library(summarytools)
+library(corrplot)
+library(caret)
+library(vip)
+library(rpart.plot)
+library(ranger)
+library(gridExtra)
+```
+
+# Data Import
+```{r import_data}
+# import data
+load("./recovery.RData")
+
+set.seed(3196) 
+lts.dat <- dat[sample(1:10000, 2000),]
+set.seed(2575)
+lincole.dat <- dat[sample(1:10000, 2000),]
+set.seed(5509)
+amy.dat <- dat[sample(1:10000, 2000),]
+
+dat1 <- lts.dat %>% 
+  merge(lincole.dat, all = TRUE) %>% 
+  na.omit() %>% 
+  select(-id) %>% 
+  mutate(
+    gender = as.factor(gender),
+    race = as.factor(race),
+    smoking = as.factor(smoking),
+    hypertension = as.factor(hypertension),
+    diabetes = as.factor(diabetes),
+    vaccine = as.factor(vaccine),
+    severity = as.factor(severity),
+    study = as.factor(study))
+  
+dat2 <- lts.dat %>% 
+  merge(amy.dat, all = TRUE) %>% 
+  na.omit() %>% 
+  select(-id) %>% 
+  mutate(
+    gender = as.factor(gender),
+    race = as.factor(race),
+    smoking = as.factor(smoking),
+    hypertension = as.factor(hypertension),
+    diabetes = as.factor(diabetes),
+    vaccine = as.factor(vaccine),
+    severity = as.factor(severity),
+    study = as.factor(study))
+
+dat3 <- lincole.dat %>% 
+  merge(amy.dat, all = TRUE) %>% 
+  na.omit() %>% 
+  select(-id) %>% 
+  mutate(
+    gender = as.factor(gender),
+    race = as.factor(race),
+    smoking = as.factor(smoking),
+    hypertension = as.factor(hypertension),
+    diabetes = as.factor(diabetes),
+    vaccine = as.factor(vaccine),
+    severity = as.factor(severity),
+    study = as.factor(study))
+
+dat <- dat1
+summary(dat)
+
+bin.dat <- dat %>% 
+  mutate(recovery_time = ifelse(recovery_time > 30, "gt30", "lt30")) %>% 
+  mutate(recovery_time = factor(recovery_time, levels = c("lt30", "gt30")))
+
+summary(bin.dat)
+```
+
+# Data partition
+
+```{r data_partition}
+# data partition
+dat.matrix <- model.matrix(recovery_time ~ ., dat)[ ,-1]
+
+set.seed(2023)
+trainRows <- createDataPartition(y = dat$recovery_time, p = 0.8, list = FALSE)
+
+train.dat <- dat[trainRows,]
+train.bin.dat <- bin.dat[trainRows,]
+
+train.dat.matrix <- model.matrix(~., train.dat)[, -1]
+train.bin.dat.matrix <- train.dat.matrix %>% 
+  as.data.frame() %>% 
+ mutate(recovery_time = ifelse(recovery_time > 30, "gt30", "lt30")) %>% 
+  mutate(recovery_time = factor(recovery_time, levels = c("lt30", "gt30"))) 
+
+train.x <- dat.matrix[trainRows,]
+train.y <- dat$recovery_time[trainRows]
+train.bin.y <- bin.dat$recovery_time[trainRows]
+
+test.x <- dat.matrix[-trainRows,]
+test.y <- dat$recovery_time[-trainRows]
+test.bin.y <- bin.dat$recovery_time[-trainRows]
+```
+
+# Exploratory analysis and data visualization
+
+
+```{r primary_summary, results = 'asis'}
+# data summary
+st_options(plain.ascii = FALSE,
+           style = "rmarkdown",
+           dfSummary.silent = TRUE,
+           footnote = NA,
+           subtitle.emphasis = FALSE)
+dfSummary(train.dat)
+
+skimr::skim_without_charts(train.dat)
+```
+
+
+```{r pri_eda, fig.show='true'}
+####################################################################
+## Remember to edit the next chunk if you do any modification here:)
+####################################################################
+
+# EDA
+cts_var = c("age", "height", "weight", "bmi", "SBP", "LDL")
+fct_var = c("gender", "race", "smoking", "hypertension", "diabetes", "vaccine", "severity", "study")
+
+# scatter plot of continuous predictors
+par(mfrow=c(2, 3))
+for (i in 1:length(cts_var)){
+  var = cts_var[i]
+  plot(recovery_time~train.dat[,var],
+       data = train.dat,
+       ylab = "recovery time",
+       xlab = var,
+       main = str_c("Scatter Plot of ", var))
+  lines(stats::lowess(train.dat[,var], train.dat$recovery_time), col = "red", type = "l")
+}
+for (i in 1:length(cts_var)){
+  var = cts_var[i]
+  hist(train.dat[,var], 
+       ylab = "recovery_time", 
+       xlab = var, 
+       main = str_c("Histogram of ", var)) 
+}
+
+# boxplot of categorical predictors
+par(mfrow=c(2, 4))
+for (i in 1:length(fct_var)){
+  var = fct_var[i]
+  plot(recovery_time~train.dat[,var],
+       data = train.dat,
+       ylab = "recovery_time", 
+       xlab = var, 
+       main = str_c("Boxplot of ", var))
+}
+
+# histogram of response
+par(mfrow=c(1, 1))
+hist(train.dat$recovery_time, 
+     breaks = 50, 
+     main = "Histogram of recovery_time", 
+     xlab = "recovery_time")
+
+# correlation
+par(mfrow=c(1, 1))
+corrplot(cor(train.dat[,cts_var]), method = "circle", type = "full", 
+         title = "Correlation plot of continuous variables", 
+         mar = c(2, 2, 4, 2))
+```
+
+```{r pri_eda_save_plot, include=FALSE}
+# this chunk is used just for saving codes
+# create folder for figures
+folder_path <- "./figure/"
+if (!file.exists(folder_path)) {
+  dir.create(folder_path, recursive = TRUE)
+} else{print("...")}
+
+# EDA
+# scatter plot of continuous predictors
+jpeg("./figure/eda1_sactter.jpeg", width=8, height=6, units="in", res=500)
+par(mfrow=c(2, 3))
+for (i in 1:length(cts_var)){
+  var = cts_var[i]
+  plot(recovery_time~train.dat[,var],
+       data = train.dat,
+       ylab = "recovery_time",
+       xlab = var,
+       main = str_c("Scatter plot of ", var))
+  lines(stats::lowess(train.dat[,var], train.dat$recovery_time), col = "red", type = "l")
+}
+dev.off()
+
+# histograms of predictors
+jpeg("./figure/eda1_hist.jpeg", width=8, height=6, units="in", res=500)
+par(mfrow=c(2, 3))
+for (i in 1:length(cts_var)){
+  var = cts_var[i]
+  hist(train.dat[,var], 
+       ylab = "recovery_time", 
+       xlab = var, 
+       main = str_c("Histogram of ", var)) 
+}
+dev.off()
+
+
+# boxplot of categorical predictors
+jpeg("./figure/eda1_boxplot.jpeg", width = 10, height=6, units="in", res=500)
+par(mfrow=c(2, 4))
+for (i in 1:length(fct_var)){
+  var = fct_var[i]
+  plot(recovery_time~train.dat[,var],
+       data = train.dat,
+       ylab = "recovery_time", 
+       xlab = var, 
+       main = str_c("Boxplot of ", var))
+}
+dev.off()
+
+# histogram of response
+jpeg("./figure/eda1_res_hist.jpeg", width = 8, height=6, units="in", res=500)
+par(mfrow=c(1, 1))
+hist(train.dat$recovery_time, 
+     breaks = 50, 
+     main = "Histogram of recovery_time", 
+     xlab = "recovery_time")
+dev.off()
+
+# correlation
+jpeg("./figure/eda1_corr.jpeg", width = 5, height=5, units="in", res=500)
+par(mfrow=c(1, 1))
+corrplot(cor(train.dat[,cts_var]), method = "circle", type = "full", 
+         title = "Correlation plot of continuous variables", 
+         mar = c(2, 2, 4, 2))
+dev.off()
+```
+
+```{r sec_summary, results = 'asis'}
+# data summary
+st_options(plain.ascii = FALSE,
+           style = "rmarkdown",
+           dfSummary.silent = TRUE,
+           footnote = NA,
+           subtitle.emphasis = FALSE)
+dfSummary(train.bin.dat)
+
+skimr::skim_without_charts(train.bin.dat)
+```
+
+
+```{r sec_eda, fig.show='true'}
+####################################################################
+## Remember to edit the next chunk if you do any modification here:)
+####################################################################
+# EDA
+
+# boxplot of continuous predictors
+par(mfrow=c(2, 3))
+for (i in 1:length(cts_var)){
+  var = cts_var[i]
+  boxplot(train.bin.dat[,var]~recovery_time,
+       data = train.bin.dat,
+       xlab = "recovery time",
+       ylab = var, 
+       main = str_c("Boxplot of ", var))
+}
+
+# barplot of categorical predictors
+par(mfrow=c(2, 4))
+for (i in 1:length(fct_var)){
+  var <- fct_var[i]
+  counts <- table(train.bin.dat[,var], train.bin.y)
+  barplot(counts, beside = TRUE, legend.text = TRUE,
+        xlab = "recovery time", 
+        ylab = "Count", 
+        main = str_c("Barplot of ", var), 
+        args.legend = list(bty = 'n', x = 'topleft'))
+}
+
+# barplot of response
+par(mfrow=c(1, 1))
+counts <- table(train.bin.y)
+barplot(counts, 
+        xlab = "recovery time", 
+        ylab = "Count", 
+        main = "Barplot of binary recovery_time")
+```
+
+```{r sec_eda_save_plot, include=FALSE}
+# this chunk is used just for saving codes
+# EDA
+
+# boxplot of continuous predictors
+jpeg("./figure/eda2_boxplot.jpeg", width=8, height=6, units="in", res=500)
+par(mfrow=c(2, 3))
+for (i in 1:length(cts_var)){
+  var = cts_var[i]
+  boxplot(train.bin.dat[,var]~recovery_time,
+       data = train.bin.dat,
+       xlab = "recovery time",
+       ylab = var,
+       main = str_c("Boxplot of ", var))
+}
+dev.off()
+
+# barplot of categorical predictors
+jpeg("./figure/eda2_barplot.jpeg", width=8, height=6, units="in", res=500)
+par(mfrow=c(2, 4))
+for (i in 1:length(fct_var)){
+  var <- fct_var[i]
+  counts <- table(train.bin.dat[,var], train.bin.y)
+  barplot(counts, beside = TRUE, legend.text = TRUE,
+        xlab = "recovery time", 
+        ylab = "Count", 
+        main = str_c("Barplot of ", var), 
+        args.legend = list(bty = 'n', x = 'topleft'))
+}
+dev.off()
+
+# barplot of response
+jpeg("./figure/eda2_res_barplot.jpeg", width = 8, height=6, units="in", res=500)
+par(mfrow=c(1, 1))
+counts <- table(train.bin.y)
+barplot(counts, 
+        xlab = "recovery time", 
+        ylab = "Count", 
+        main = "Barplot of binary recovery_time")
+dev.off()
+```

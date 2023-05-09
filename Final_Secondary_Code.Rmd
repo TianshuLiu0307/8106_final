@@ -1,0 +1,474 @@
+---
+title: "Final Secondary Analysis"
+author: "Tianshu Liu, Lincole Jiang, Jiong Ma"
+output:
+  pdf_document:
+    toc: yes
+    toc_depth: 3
+    number_sections: true
+  html_document:
+    df_print: paged
+    toc: yes
+    toc_depth: '3'
+header-includes:
+- \usepackage{fancyhdr}
+- \usepackage{lipsum}
+- \pagestyle{fancy}
+- \fancyhead[R]{\thepage}
+- \fancypagestyle{plain}{\pagestyle{fancy}}
+editor_options: 
+  chunk_output_type: console
+---
+\newpage
+
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, 
+                      message = FALSE, 
+                      warning = FALSE)
+```
+
+```{r library}
+library(tidyverse)
+library(summarytools)
+library(corrplot)
+library(caret)
+library(vip)
+library(rpart.plot)
+library(ranger)
+```
+
+```{r import_data, include=FALSE}
+# import data
+load("./recovery.RData")
+
+set.seed(3196) 
+lts.dat <- dat[sample(1:10000, 2000),]
+set.seed(2575)
+lincole.dat <- dat[sample(1:10000, 2000),]
+set.seed(5509)
+amy.dat <- dat[sample(1:10000, 2000),]
+
+dat1 <- lts.dat %>% 
+  merge(lincole.dat, all = TRUE) %>% 
+  na.omit() %>% 
+  select(-id) %>% 
+  mutate(
+    gender = as.factor(gender),
+    race = as.factor(race),
+    smoking = as.factor(smoking),
+    hypertension = as.factor(hypertension),
+    diabetes = as.factor(diabetes),
+    vaccine = as.factor(vaccine),
+    severity = as.factor(severity),
+    study = as.factor(study))
+  
+dat2 <- lts.dat %>% 
+  merge(amy.dat, all = TRUE) %>% 
+  na.omit() %>% 
+  select(-id) %>% 
+  mutate(
+    gender = as.factor(gender),
+    race = as.factor(race),
+    smoking = as.factor(smoking),
+    hypertension = as.factor(hypertension),
+    diabetes = as.factor(diabetes),
+    vaccine = as.factor(vaccine),
+    severity = as.factor(severity),
+    study = as.factor(study))
+
+dat3 <- lincole.dat %>% 
+  merge(amy.dat, all = TRUE) %>% 
+  na.omit() %>% 
+  select(-id) %>% 
+  mutate(
+    gender = as.factor(gender),
+    race = as.factor(race),
+    smoking = as.factor(smoking),
+    hypertension = as.factor(hypertension),
+    diabetes = as.factor(diabetes),
+    vaccine = as.factor(vaccine),
+    severity = as.factor(severity),
+    study = as.factor(study))
+
+dat <- dat1
+summary(dat)
+
+bin.dat <- dat %>% 
+  mutate(recovery_time = ifelse(recovery_time > 30, "gt30", "lt30")) %>%
+  mutate(recovery_time = factor(recovery_time, levels = c("lt30", "gt30")))
+
+summary(bin.dat)
+```
+
+```{r data_partition, include=FALSE}
+# data partition
+dat.matrix <- model.matrix(recovery_time ~ ., dat)[ ,-1]
+
+set.seed(2023)
+trainRows <- createDataPartition(y = dat$recovery_time, p = 0.8, list = FALSE)
+
+train.dat <- dat[trainRows,]
+train.bin.dat <- bin.dat[trainRows,]
+
+train.dat.matrix <- model.matrix(~., train.dat)[, -1]
+train.bin.dat.matrix <- train.dat.matrix %>% 
+  as.data.frame() %>% 
+ mutate(recovery_time = ifelse(recovery_time > 30, "gt30", "lt30")) %>% 
+  mutate(recovery_time = factor(recovery_time, levels = c("lt30", "gt30"))) 
+
+train.x <- dat.matrix[trainRows,]
+train.y <- dat$recovery_time[trainRows]
+train.bin.y <- bin.dat$recovery_time[trainRows]
+
+test.x <- dat.matrix[-trainRows,]
+test.y <- dat$recovery_time[-trainRows]
+test.bin.y <- bin.dat$recovery_time[-trainRows]
+```
+
+# Model Training
+
+## Secondary Analysis
+```{r ctrl1}
+ctrl1 <- trainControl(method = "cv", number = 10)
+```
+### Logistic Regression
+
+```{r logistic}
+set.seed(2023)
+glm.fit <- train(x = train.x, 
+                 y = train.bin.y,
+                 method = 'glm',
+                 trControl = ctrl1)
+coef(glm.fit$finalModel)
+vip(glm.fit$finalModel) + theme_bw()
+```
+
+
+### Penalized Logistic Regression
+
+```{r plr}
+glmnGrid <- expand.grid(.alpha = seq(0, 1, length = 21),
+                        .lambda = exp(seq(-10, -5, length = 15)))
+set.seed(2023)
+glmn.fit <- train(train.x, 
+                  train.bin.y,
+                  method = 'glmnet',
+                  tuneGrid = glmnGrid,
+                  trControl = ctrl1)
+
+glmn.fit$bestTune
+
+myCol<- rainbow(25)
+myPar <- list(superpose.symbol = list(col = myCol), 
+              superpose.line = list(col = myCol))
+
+ggplot(glmn.fit, highlight = TRUE) + 
+  labs(title="Penalized Logistic Regression CV Result") +
+  theme_bw()
+
+ggsave("./figure/penal_logi_cv.jpeg", dpi = 500)
+
+#coef(glmn.fit$finalModel)
+vip(glmn.fit$finalModel) + theme_bw()
+```
+
+
+### Generalized Additive Model (GAM) for classification
+
+```{r binarygam}
+set.seed(2023)
+gam.bin.fit <- train(train.x, 
+                     train.bin.y,
+                     method = "gam",
+                     trControl = ctrl1)
+
+ggplot(gam.bin.fit) +
+  labs(title = "GAM Classification CV Result") + 
+  theme_bw()
+ggsave("./figure/gam_binned_cv.jpeg", dpi = 500)
+
+gam.bin.fit$bestTune
+
+par(mfrow=c(2, 3))
+plot(gam.bin.fit$finalModel)
+par(mfrow=c(1, 1))
+```
+
+
+### Multivariate Adaptive Regression Splines (MARS) for classification
+
+```{r binaryMars}
+set.seed(2023)
+mars.bin.fit <- train(train.x, 
+                      train.bin.y,
+                      method = "earth",
+                      tuneGrid = expand.grid(degree = 1:3,
+                                             nprune = 2:ncol(train.x)),
+                      trControl = ctrl1)
+
+mars.bin.fit$bestTune
+
+ggplot(mars.bin.fit, highlight = TRUE) + 
+  labs(title  ="MARS Classification CV Result") +
+  theme_bw()
+
+ggsave("./figure/mars_binned_cv.jpeg", dpi = 500)
+
+mars.bin.fit$bestTune
+
+coef(mars.bin.fit$finalModel) %>% 
+  broom::tidy() %>% 
+  knitr::kable()
+summary(mars.bin.fit$finalModel)
+vip(mars.bin.fit$finalModel) + theme_bw()
+```
+
+### Linear Discriminant Analysis (LDA)
+
+```{r lda}
+set.seed(2023)
+lda.fit <- train(train.x,
+                 train.bin.y,
+                 method = "lda",
+                 trControl = ctrl1)
+```
+
+### Quadratic Discriminant Analysis (QDA)
+
+```{r qda}
+set.seed(2023)
+qda.fit <- train(train.x,
+                   train.bin.y,
+                   method = "qda",
+                   trControl = ctrl1)
+```
+
+### Naive Bayes (NB)
+
+```{r nb}
+nbGrid <- expand.grid(usekernel = c(FALSE,TRUE),
+                      fL = 1,
+                      adjust = seq(0.1, 1, by = .1))
+set.seed(2023)
+nb.fit <- train(train.x,
+                  train.bin.y,
+                  method = "nb",
+                  tuneGrid = nbGrid,
+                  trControl = ctrl1)
+nb.fit$bestTune
+ggplot(nb.fit, highlight = TRUE) + 
+  labs(title  ="Naive Bayes Classification CV Result") +
+  theme_bw()
+
+ggsave("./figure/nb_cv.jpeg", dpi = 500)
+```
+
+
+### Bagging
+
+```{r binaryBag}
+bag.grid2 <- expand.grid(mtry = ncol(train.x),
+                       splitrule = "gini",
+                       min.node.size = seq(1, 19, by = 2))
+set.seed(2023)
+bag.fit2 <- train(train.x, 
+                 train.bin.y,
+                 method = "ranger",
+                 tuneGrid = bag.grid2, 
+                 trControl = ctrl1)
+
+bag.fit2$bestTune
+
+ggplot(bag.fit2, highlight = TRUE) + 
+  labs(title = "Bagging Classification CV Result") + 
+  theme_bw()
+
+ggsave("./figure/bagging_classification_cv.jpeg", dpi = 500)
+
+bag.final.per2 <- ranger(recovery_time ~ .,
+                        data = train.bin.dat.matrix, 
+                        mtry = ncol(train.x),
+                       splitrule = "gini",
+                       min.node.size = bag.fit2$bestTune[[3]],
+                       importance = "permutation",
+                       scale.permutation.importance = TRUE)
+
+barplot(sort(ranger::importance(bag.final.per2), 
+             decreasing = FALSE),
+        las = 2, horiz = TRUE, cex.names = 0.7,
+        col = colorRampPalette(colors = c("cyan","blue"))(ncol(train.x)))
+```
+
+
+### Random Forest
+
+```{r binaryRF}
+rf.grid2 <- expand.grid(mtry = 1:ncol(train.x),
+                       splitrule = "gini",
+                       min.node.size = seq(10, 18, by = 2))
+set.seed(2023)
+rf.fit2 <- train(train.x, 
+                train.bin.y,
+                method = "ranger",
+                tuneGrid = rf.grid2,
+                trControl = ctrl1)
+
+rf.fit2$bestTune
+
+ggplot(rf.fit2, highlight = TRUE) + 
+  labs(title = "Random Forest Classification CV Result") + 
+  theme_bw()
+ggsave("./figure/rf_classification_cv.jpeg", dpi = 500)
+
+rf.final.per2 <- ranger(recovery_time ~ .,
+                       data = train.bin.dat.matrix, 
+                       mtry = rf.fit2$bestTune[[1]],
+                       splitrule = "gini",
+                       min.node.size = rf.fit2$bestTune[[3]],
+                       importance = "permutation",
+                       scale.permutation.importance = TRUE)
+
+barplot(sort(ranger::importance(rf.final.per2), decreasing = FALSE),
+        las = 2, horiz = TRUE, cex.names = 0.7,
+        col = colorRampPalette(colors = c("cyan","blue"))(ncol(train.x)))
+```
+
+
+### Boosting
+
+```{r binaryBoost}
+set.seed(2023)
+bst.grid2 <- expand.grid(n.trees = c(6000, 7000, 8000),
+                        interaction.depth = 1:3,
+                        shrinkage = c(0.0025, 0.005, 0.01),
+                        n.minobsinnode = c(1,10))
+
+bst.fit2 <- train(train.x, 
+                 train.bin.y,
+                 method = "gbm",
+                 tuneGrid = bst.grid2,
+                 trControl = ctrl1,
+                 verbose = FALSE)
+
+bst.fit2$bestTune
+
+ggplot(bst.fit2, highlight = TRUE) + 
+  labs(title = "Boosting Classification CV Result") + 
+  theme_bw()
+
+ggsave("./figure/boosting_classification_cv.jpeg", dpi = 500)
+
+# Variable Importance
+summary(bst.fit2$finalModel, las = 2, cBars = ncol(train.x), cex.names = 0.6)
+```
+
+
+### Classification Trees
+
+```{r binarytree}
+rpart.grid = expand.grid(cp = exp(seq(-6,-4, len = 50)))
+set.seed(2023)
+rpart.fit2 <- train(train.x, 
+                   train.bin.y, 
+                   method = "rpart",
+                   tuneGrid = rpart.grid,
+                   trControl = ctrl1)
+
+rpart.fit2$bestTune
+
+ggplot(rpart.fit2, highlight = TRUE) +
+  labs(title = "Classification Tree CV Result") + 
+  theme_bw()
+
+ggsave("./figure/rpart2_cv.jpeg", dpi = 500)
+
+rpart.plot(rpart.fit2$finalModel)
+
+jpeg("./figure/rpart2.jpeg", width = 8, height = 6, units="in", res=500)
+rpart.plot(rpart.fit2$finalModel)
+dev.off()
+```
+
+
+### Support Vector Machine (SVM)
+
+```{r svml}
+set.seed(2023)
+svml.fit <- train(train.x, 
+                  train.bin.y,
+                  method = "svmLinear",
+                  tuneGrid = data.frame(C = exp(seq(-6, 3, len = 21))),
+                  trControl = ctrl1)
+ggplot(svml.fit, highlight = TRUE) + 
+  scale_x_continuous(trans='log',n.breaks = 10) +
+  labs(title = "SVM Linear CV result") + 
+  theme_bw()
+```
+
+
+```{r svmr}
+svmr.grid <- expand.grid(C = exp(seq(-2, 5, len = 20)),
+                         sigma = exp(seq(-4, 1, len = 6)))
+
+set.seed(2023)
+svmr.fit <- train(train.x, 
+                  train.bin.y,
+                  method = "svmRadialSigma",
+                  tuneGrid = svmr.grid,
+                  trControl = ctrl1)
+
+svmr.fit$bestTune
+myCol<- rainbow(25)
+myPar <- list(superpose.symbol = list(col = myCol),
+              superpose.line = list(col = myCol))
+ggplot(svmr.fit, highlight = TRUE, par.settings = myPar) + 
+  scale_x_continuous(trans='log',n.breaks = 10) +
+  labs(title = "SVM Radial Kernal CV result") + 
+  theme_bw()
+
+ggsave("./figure/svmr_cv.jpeg", dpi = 500)
+
+confusionMatrix(svmr.fit)
+```
+
+
+## Model Selection
+
+```{r resample2}
+set.seed(2023)
+resamp <- resamples(list(glm = glm.fit, 
+                         glmnet = glmn.fit,
+                         gam = gam.bin.fit, 
+                         mars = mars.bin.fit, 
+                         lda = lda.fit, 
+                         qda = qda.fit, 
+                         nb = nb.fit,
+                         bagging = bag.fit2, 
+                         rf = rf.fit2,
+                         boosting = bst.fit2, 
+                         tree = rpart.fit2, 
+                         svml <- svml.fit, 
+                         svmr = svmr.fit))
+
+summary(resamp)
+
+p1=bwplot(resamp, metric = "Accuracy")
+p2=bwplot(resamp, metric = "Kappa")
+grid.arrange(p1, p2 ,ncol=2)
+
+jpeg("./figure/resample2.jpeg", width = 8, height=6, units="in", res=500)
+p1=bwplot(resamp, metric = "Accuracy")
+p2=bwplot(resamp, metric = "Kappa")
+grid.arrange(p1, p2, ncol=2)
+dev.off()
+```
+
+## Training  / Testing Error
+
+```{r testerror}
+pred.svmr <- predict(svmr.fit, newdata = test.x)
+confusionMatrix(data = pred.svmr, reference = test.bin.y)
+```
+
