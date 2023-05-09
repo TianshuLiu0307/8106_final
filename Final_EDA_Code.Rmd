@@ -206,7 +206,7 @@ if (!file.exists(folder_path)) {
 
 # EDA
 # scatter plot of continuous predictors
-jpeg("./figure/eda1_sactter.jpeg", width=8, height=6, units="in", res=500)
+jpeg("./figure/eda1_sactter.jpeg", width=6, height=6, units="in", res=500)
 par(mfrow=c(2, 3))
 for (i in 1:length(cts_var)){
   var = cts_var[i]
@@ -220,7 +220,7 @@ for (i in 1:length(cts_var)){
 dev.off()
 
 # histograms of predictors
-jpeg("./figure/eda1_hist.jpeg", width=8, height=6, units="in", res=500)
+jpeg("./figure/eda1_hist.jpeg", width=6, height=6, units="in", res=500)
 par(mfrow=c(2, 3))
 for (i in 1:length(cts_var)){
   var = cts_var[i]
@@ -233,7 +233,7 @@ dev.off()
 
 
 # boxplot of categorical predictors
-jpeg("./figure/eda1_boxplot.jpeg", width = 10, height=6, units="in", res=500)
+jpeg("./figure/eda1_boxplot.jpeg", width = 8, height=6, units="in", res=500)
 par(mfrow=c(2, 4))
 for (i in 1:length(fct_var)){
   var = fct_var[i]
@@ -316,7 +316,7 @@ barplot(counts,
 # EDA
 
 # boxplot of continuous predictors
-jpeg("./figure/eda2_boxplot.jpeg", width=8, height=6, units="in", res=500)
+jpeg("./figure/eda2_boxplot.jpeg", width=6, height=6, units="in", res=500)
 par(mfrow=c(2, 3))
 for (i in 1:length(cts_var)){
   var = cts_var[i]
