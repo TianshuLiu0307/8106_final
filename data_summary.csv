@@ -1,0 +1,37 @@
+,skim_type,skim_variable,n_missing,factor.n_unique,factor.top_counts,,,,,
+1,factor,gender,0,2,"0: 1468, 1: 1432",,,,,
+2,factor,race,0,4,"1: 1909, 3: 568, 4: 291, 2: 132",,,,,
+3,factor,smoking,0,3,"0: 1763, 1: 845, 2: 292",,,,,
+4,factor,hypertension,0,2,"0: 1514, 1: 1386",,,,,
+5,factor,diabetes,0,2,"0: 2446, 1: 454",,,,,
+6,factor,vaccine,0,2,"1: 1708, 0: 1192",,,,,
+7,factor,severity,0,2,"0: 2619, 1: 281",,,,,
+8,factor,study,0,3,"B: 1750, A: 580, C: 570",,,,,
+,,,,,,,,,,
+,skim_type,skim_variable,n_missing,numeric.mean,numeric.sd,numeric.p0,numeric.p25,numeric.p50,numeric.p75,numeric.p100
+9,numeric,age,0,60.06724138,4.512673806,45,57,60,63,77
+10,numeric,height,0,170.1672069,6.038413637,151.2,166.1,170.15,174.1,188.6
+11,numeric,weight,0,80.19596552,6.999874901,57.1,75.4,80.3,84.9,103.4
+12,numeric,bmi,0,27.75524138,2.726642808,19.7,25.9,27.7,29.5,39.8
+13,numeric,SBP,0,130.1924138,8.084211679,104,125,130,136,158
+14,numeric,LDL,0,110.2693103,19.87227818,32,97,110,124,174
+15,numeric,recovery_time,0,43.02482759,30.50539122,3,28,38,49,365
+,,,,,,,,,,
+,,,,,,,,,,
+,,,,,,,,,,
+,skim_type,skim_variable,n_missing,factor.n_unique,factor.top_counts,,,,,
+1,factor,gender,0,2,"0: 1468, 1: 1432",,,,,
+2,factor,race,0,4,"1: 1909, 3: 568, 4: 291, 2: 132",,,,,
+3,factor,smoking,0,3,"0: 1763, 1: 845, 2: 292",,,,,
+4,factor,hypertension,0,2,"0: 1514, 1: 1386",,,,,
+5,factor,diabetes,0,2,"0: 2446, 1: 454",,,,,
+6,factor,vaccine,0,2,"1: 1708, 0: 1192",,,,,
+7,factor,severity,0,2,"0: 2619, 1: 281",,,,,
+8,factor,study,0,3,"B: 1750, A: 580, C: 570",,,,,
+9,numeric,age,0,,,,,,,
+10,numeric,height,0,,,,,,,
+11,numeric,weight,0,,,,,,,
+12,numeric,bmi,0,,,,,,,
+13,numeric,SBP,0,,,,,,,
+14,numeric,LDL,0,,,,,,,
+15,numeric,recovery_time,0,,,,,,,

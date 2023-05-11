@@ -19,9 +19,8 @@ header-includes:
 editor_options: 
   chunk_output_type: console
 ---
+
 \newpage
-
-
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE, 
@@ -41,6 +40,7 @@ library(gridExtra)
 ```
 
 # Data Import
+
 ```{r import_data}
 # import data
 load("./recovery.RData")
@@ -133,7 +133,6 @@ test.bin.y <- bin.dat$recovery_time[-trainRows]
 
 # Exploratory analysis and data visualization
 
-
 ```{r primary_summary, results = 'asis'}
 # data summary
 st_options(plain.ascii = FALSE,
@@ -145,7 +144,6 @@ dfSummary(train.dat)
 
 skimr::skim_without_charts(train.dat)
 ```
-
 
 ```{r pri_eda, fig.show='true'}
 # EDA
@@ -274,7 +272,6 @@ dfSummary(train.bin.dat)
 
 skimr::skim_without_charts(train.bin.dat)
 ```
-
 
 ```{r sec_eda, fig.show='true'}
 # EDA

@@ -37,6 +37,7 @@ library(caret)
 library(vip)
 library(rpart.plot)
 library(ranger)
+library(e1071)
 ```
 
 ```{r import_data, include=FALSE}
@@ -431,6 +432,46 @@ ggplot(svmr.fit, highlight = TRUE, par.settings = myPar) +
   theme_bw()
 
 ggsave("./figure/svmr_cv.jpeg", dpi = 500)
+
+
+importance <- varImp(svmr.fit)$importance
+
+vip_data <- data.frame(Variables = row.names(importance), Importance = importance$lt30)
+
+vip_data <- vip_data[order(vip_data$Importance, decreasing = TRUE), ]
+
+ggplot(vip_data, aes(x = Importance, y = reorder(Variables, Importance))) +
+  geom_bar(stat = "identity") +
+  labs(x = "Importance", y = "Variables", title = "SVMR ad hoc variable importance scores") +
+  theme_bw()
+
+ggsave("./figure/svmr_vip.jpeg", dpi = 500)
+
+svmr.fit2 = svm(recovery_time ~ .,
+               data = train.bin.dat.matrix,
+               kernel = "radial",
+               cost = svmr.fit$bestTune$C,
+               gamma = svmr.fit$bestTune$sigma, 
+               probability = TRUE)
+summary(svmr.fit2)
+
+pdp.studyB <-pdp::partial(svmr.fit2, pred.var = c("studyB"), grid.resolution = 10) %>% autoplot() + 
+  theme_bw()
+
+pdp.vaccine1 <- pdp::partial(svmr.fit2, pred.var = c("vaccine1"), grid.resolution = 10) %>% autoplot() +
+  theme_bw()
+
+pdp.studyC <- pdp::partial(svmr.fit2, pred.var = c("studyC"), grid.resolution = 10) %>% autoplot() +
+  theme_bw() 
+
+pdp.bmi <- pdp::partial(svmr.fit2, pred.var = c("bmi"), grid.resolution = 10) %>% autoplot() +
+  theme_bw()
+
+gridExtra::grid.arrange(pdp.studyB, pdp.vaccine1, pdp.studyC,  pdp.bmi, ncol = 2, top = "Partial Dependence Plots of SVMR Model")
+
+jpeg("./figure/svmr_pdp.jpeg", width = 8, height=6, units="in", res=500)
+gridExtra::grid.arrange(pdp.studyB, pdp.vaccine1, pdp.studyC,  pdp.bmi, ncol = 2, top = "Partial Dependence Plots of SVMR Model")
+dev.off()
 ```
 
 

@@ -458,6 +458,11 @@ ggsave("./figure/boosting_cv.jpeg", dpi = 500)
 
 # Variable Importance
 summary(bst.fit$finalModel, las = 2, cBars = ncol(train.x), cex.names = 0.6)
+
+
+vip(bst.fit$finalModel, num_features = 18) + theme_bw() + 
+  labs(title = "Boosting Model Variable Importance Scores")
+ggsave("./figure/boosting_vip.jpeg", dpi = 500)
 ```
 
 
@@ -486,69 +491,6 @@ jpeg("./figure/rpart1.jpeg", width = 8, height = 6, units="in", res=500)
 rpart.plot(rpart.fit1$finalModel)
 dev.off()
 ```
-
-```{r mergecvplots}
-library(patchwork)
-lasso <- ggplot(lasso.fit, highlight = TRUE) + 
-  labs(title="LASSO CV Result") +
-  scale_x_continuous(trans='log',n.breaks = 10) +
-  theme_bw()
-
-ridge <- ggplot(ridge.fit,highlight = TRUE) + 
-  scale_x_continuous(trans='log', n.breaks = 6) +
-  labs(title="Ridge CV Result") +
-  theme_bw()
-
-enet <- ggplot(enet.fit, highlight = TRUE) + 
-  scale_x_continuous(trans='log', n.breaks = 6) +
-  labs(title ="Elastic Net CV Result") + 
-  theme_bw()
-
-pcr <- ggplot(pcr.fit, highlight = TRUE) + 
-  labs(title  ="PCR CV Result") +
-  theme_bw()
-  
-pls <- ggplot(pls.fit, highlight = TRUE) + 
-  labs(title  ="PLS CV Result") +
-  theme_bw()
-  
-gam <- ggplot(gam.fit) +
-  labs(title = "GAM CV Result") + 
-  theme_bw()
-
-mars <- ggplot(mars.fit, highlight = TRUE)+ 
-  labs(title  ="MARS CV Result") +
-  theme_bw()
-
-knn <- ggplot(knn.fit, highlight = TRUE) + 
-  labs(title  ="KNN CV Result") +
-  theme_bw()
-
-bagging <- ggplot(bag.fit, highlight = TRUE) + 
-  labs(title = "Bagging CV Result") + 
-  theme_bw()
-  
-rf <- ggplot(rf.fit, highlight = TRUE) + 
-  labs(title = "Random Forest CV Result") + 
-  theme_bw()
-  
-boosting <- ggplot(bst.fit, highlight = TRUE) + 
-  labs(title = "Boosting CV Result") + 
-  theme_bw()
-  
-tree <- ggplot(rpart.fit1, highlight = TRUE) +
-  labs(titlem = "Regression Tree CV Result") +
-  theme_bw()
-
-p <- wrap_plots(enet, pcr, 
-           pls,
-           mars, knn, 
-           bagging, rf, boosting, tree, 
-           ncol = 3)
-p
-ggsave(plot = p, filename = "./primary_cv.jpeg", dpi = 500)
-```
-
 
 ## Model Selection
 
@@ -590,6 +532,7 @@ p2 <-pdp::partial(bst.fit, pred.var = c("bmi", "studyB"),
                    grid.resolution = 10) %>%
       pdp::plotPartial(levelplot = FALSE, zlab = "yhat", drape = TRUE,
                        screen = list(z = 20, x = -60))
+summary(bst.fit$finalModel, las = 2, cBars = ncol(train.x), cex.names = 0.6)
 
 # jpeg("./figure/partial_dependence.jpeg", width = 8, height=6, units="in", res=500)
 gridExtra::grid.arrange(p1, p2, ncol = 2)
@@ -602,9 +545,6 @@ dev.off()
 # Variable Importance
 summary(bst.fit$finalModel, las = 2, cBars = ncol(train.x), cex.names = 0.6)
 
-jpeg("./figure/bst.importance.jpeg", width = 8, height=6, units="in", res=500)
-summary(bst.fit$finalModel, las = 2, cBars = ncol(train.x), cex.names = 0.6)
-dev.off()
 ```
 
 ## Training / Testing Error
@@ -617,13 +557,4 @@ RMSE(bst.train.pred, train.y)
 # test error
 bst.test.pred <- predict(bst.fit, newdata = test.x)
 RMSE(bst.test.pred, test.y)
-
-# mars
-# training error
-mars.train.pred = predict(mars.fit, newdata = train.x)
-RMSE(train.y, mars.train.pred)
-
-# testing error
-mars.pred = predict(mars.fit, newdata = test.x)
-RMSE(test.y, mars.pred)
 ```
